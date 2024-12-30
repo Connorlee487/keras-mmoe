@@ -79,34 +79,36 @@ class ROCCallback(Callback):
         return
 
 def data_preparation():
-    label_columns = ['HOSP', 'RDMIT']
+    label1 = 'PHYFLAG', label2 = 'RDMIT'
+
+    label_columns = [label1, label2] #HOSP
 
     categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS',
-                        'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'PHYFLAG', 'SEX', 'HLTHPLAN', 'INDSTRY',
-                        'OUTPATIENT', 'SEASON', 'STDPROV', 'PROCGRP']
+                        'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY',
+                        'OUTPATIENT', 'SEASON', 'STDPROV', 'PROCGRP'] #'PHYFLAG',
 
-    train_raw_labels = pd.read_csv("./data/train_raw_labels.csv")
-    other_raw_labels = pd.read_csv("./data/other_raw_labels.csv") 
-    transformed_train = pd.read_csv("./data/transformed_train.csv") 
-    transformed_other = pd.read_csv("./data/transformed_other.csv") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
+    transformed_train = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
+    transformed_other = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
 
-    train_HOSP = to_categorical((train_raw_labels['HOSP'] == 1).astype(int), num_classes=2)
-    train_RDMIT = to_categorical((train_raw_labels['RDMIT'] == 1).astype(int), num_classes=2)
+    train_HOSP = to_categorical((train_raw_labels[label1] == 1).astype(int), num_classes=2)
+    train_RDMIT = to_categorical((train_raw_labels[label2] == 1).astype(int), num_classes=2)
 
-    other_HOSP = to_categorical((other_raw_labels['HOSP'] == 1).astype(int), num_classes=2)
-    other_RDMIT = to_categorical((other_raw_labels['RDMIT'] == 1).astype(int), num_classes=2)
+    other_HOSP = to_categorical((other_raw_labels[label1] == 1).astype(int), num_classes=2)
+    other_RDMIT = to_categorical((other_raw_labels[label2] == 1).astype(int), num_classes=2)
 
     dict_outputs = {
-        'HOSP': train_HOSP.shape[1],
-        'RDMIT': train_RDMIT.shape[1]
+        label1: train_HOSP.shape[1],
+        label2: train_RDMIT.shape[1]
     }
     dict_train_labels = {
-        'HOSP': train_HOSP,
-        'RDMIT': train_RDMIT
+        label1: train_HOSP,
+        label2: train_RDMIT
     }
     dict_other_labels = {
-        'HOSP': other_HOSP,
-        'RDMIT': other_RDMIT
+        label1: other_HOSP,
+        label2: other_RDMIT
     }
     output_info = [(dict_outputs[key], key) for key in sorted(dict_outputs.keys())]
 
@@ -129,14 +131,14 @@ def data_preparation():
     # train_data = transformed_train
     # train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    return train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
+    return label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
 
 
 
 
 def main():
     # Load the data
-    train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
+    label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
     num_features = train_data.shape[1]
 
     print('Training data shape = {}'.format(train_data.shape))
@@ -172,9 +174,9 @@ def main():
     model = Model(inputs=[input_layer], outputs=output_layers)
     adam_optimizer = Adam()
     model.compile(
-        loss={'HOSP': 'binary_crossentropy', 'RDMIT': 'binary_crossentropy'},
+        loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
         optimizer=adam_optimizer,
-        metrics=['pr_auc', 'roc_auc']
+        metrics=['auc', 'auc']
     )
 
     # Print out model architecture summary
@@ -192,7 +194,7 @@ def main():
                 test_data=(test_data, test_label)
             )
         ],
-        epochs=100
+        epochs=5
     )
 
 
