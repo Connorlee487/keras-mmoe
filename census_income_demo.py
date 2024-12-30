@@ -172,9 +172,9 @@ def main():
     model = Model(inputs=[input_layer], outputs=output_layers)
     adam_optimizer = Adam()
     model.compile(
-        loss={'income': 'binary_crossentropy', 'marital': 'binary_crossentropy'},
+        loss={'HOSP': 'binary_crossentropy', 'RDMIT': 'binary_crossentropy'},
         optimizer=adam_optimizer,
-        metrics=['accuracy']
+        metrics=['pr_auc', 'roc_auc']
     )
 
     # Print out model architecture summary
