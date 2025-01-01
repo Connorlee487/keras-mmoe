@@ -79,15 +79,17 @@ class ROCCallback(Callback):
         return
 
 def data_preparation():
-    label1 = 'PHYFLAG'
+    label1 = 'HOSP'
     label2 = 'RDMIT'
 
     label_columns = [label1, label2] #HOSP
 
-    categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS',
-                        'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY',
-                        'OUTPATIENT', 'SEASON', 'STDPROV', 'PROCGRP'] #'PHYFLAG',
-
+    categorical_columns = ['PROCTYP', 'YEAR', 'CAP_SVC', 'FACPROF',
+        'MHSACOVG', 'NTWKPROV', 'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP'
+                        , 'EECLASS', 'EESTATU', 'EMPREL',
+        'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 'MONTH', 'DAY', 'PHYFLAG', 'DEACLAS_x',
+                        'GENIND_x', 'THERGRP_x', 'MAINTIN_y',
+        'PRODCAT', 'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 'THRGRDS', 'STDPROV']
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
     transformed_train = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
@@ -185,7 +187,7 @@ def main():
 
     # Train the model
     model.fit(
-        x=train_data,
+        x=train_data,   
         y=train_label,
         validation_data=(validation_data, validation_label),
         callbacks=[
