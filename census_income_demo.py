@@ -79,7 +79,8 @@ class ROCCallback(Callback):
         return
 
 def data_preparation():
-    label1 = 'PHYFLAG', label2 = 'RDMIT'
+    label1 = 'PHYFLAG'
+    label2 = 'RDMIT'
 
     label_columns = [label1, label2] #HOSP
 
