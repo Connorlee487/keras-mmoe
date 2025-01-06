@@ -66,18 +66,23 @@ class ROCCallback(Callback):
             validation_roc_auc = roc_auc_score(self.validation_Y[index], validation_prediction[index])
             test_roc_auc = roc_auc_score(self.test_Y[index], test_prediction[index])
 
-            train_precision = precision_score(self.train_Y[index], train_prediction[index], average="weighted")
-            train_recall = recall_score(self.train_Y[index], train_prediction[index], average="weighted")
-            train_f1 = f1_score(self.train_Y[index], train_prediction[index], average="weighted")    
+            threshold = 0.5
+            y_pred_train = (train_prediction[index] >= threshold).astype(int)
+            y_pred_validation = (validation_prediction[index] >= threshold).astype(int)
+            y_pred_test = (test_prediction[index] >= threshold).astype(int)
 
-            validation_precision = precision_score(self.validation_Y[index], validation_prediction[index], average='binary')
-            validation_recall = recall_score(self.validation_Y[index], validation_prediction[index], average='binary')
-            validation_f1 = f1_score(self.validation_Y[index], validation_prediction[index], average='binary')
+            train_precision = precision_score(self.train_Y[index], y_pred_train, average="weighted")
+            train_recall = recall_score(self.train_Y[index], y_pred_train, average="weighted")
+            train_f1 = f1_score(self.train_Y[index], y_pred_train, average="weighted")    
+
+            validation_precision = precision_score(self.validation_Y[index], y_pred_validation, average='binary')
+            validation_recall = recall_score(self.validation_Y[index], y_pred_validation, average='binary')
+            validation_f1 = f1_score(self.validation_Y[index], y_pred_validation, average='binary')
 
 
-            test_precision = precision_score(self.test_Y[index], test_prediction[index], average='binary')
-            test_recall = recall_score(self.test_Y[index], test_prediction[index], average='binary')
-            test_f1 = f1_score(self.test_Y[index], test_prediction[index], average='binary')
+            test_precision = precision_score(self.test_Y[index], y_pred_test, average='binary')
+            test_recall = recall_score(self.test_Y[index], y_pred_test, average='binary')
+            test_f1 = f1_score(self.test_Y[index], y_pred_test, average='binary')
 
             print(
                 'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
