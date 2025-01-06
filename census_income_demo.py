@@ -114,13 +114,19 @@ class ROCCallback(Callback):
         return
 
 def data_preparation():
-    label1 = 'HOSP'
+    label1 = 'PHYFLAG'
     label2 = 'RDMIT'
 
     label_columns = [label1, label2] #HOSP
     
-    categorical_columns = ['PROCTYP', 'YEAR', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV',  'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PHYFLAG', 'PRODCAT', 'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 'THRGRDS', 'STDPROV', 'NETPAY_x']
+    # categorical_columns = ['PROCTYP', 'YEAR', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV',  'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PHYFLAG', 'PRODCAT', 'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 'THRGRDS', 'STDPROV', 'NETPAY_x']
 
+    categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
+                        'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
+                        'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
+                        'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
+                        'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
+                        'THRGRDS', 'STDPROV', 'NETPAY_x'] #PHYFLAG
 
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
