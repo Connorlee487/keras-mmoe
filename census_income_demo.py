@@ -19,6 +19,8 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import roc_auc_score
+from sklearn.metrics import precision_recall_fscore_support
+
 
 from mmoe import MMoE
 
@@ -62,11 +64,29 @@ class ROCCallback(Callback):
             train_roc_auc = roc_auc_score(self.train_Y[index], train_prediction[index])
             validation_roc_auc = roc_auc_score(self.validation_Y[index], validation_prediction[index])
             test_roc_auc = roc_auc_score(self.test_Y[index], test_prediction[index])
+
+            train_precision, train_recall, train_f1, support = precision_recall_fscore_support(self.train_Y[index], train_prediction[index], average='binary')
+            validation_precision, validation_recall, validation_f1, support_2 = precision_recall_fscore_support(self.validation_Y[index], validation_prediction[index], average='binary')
+            test_precision, test_recall, test_f1, support_2 = precision_recall_fscore_support(self.test_Y[index], test_prediction[index], average='binary')
+
             print(
-                'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {}'.format(
+                'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
                     output_name, round(train_roc_auc, 4),
                     output_name, round(validation_roc_auc, 4),
-                    output_name, round(test_roc_auc, 4)
+                    output_name, round(test_roc_auc, 4),
+
+                    output_name, round(train_precision, 4),
+                    output_name, round(train_recall, 4),
+                    output_name, round(train_f1, 4),
+
+                    output_name, round(validation_precision, 4),
+                    output_name, round(validation_recall, 4),
+                    output_name, round(validation_f1, 4),
+                    
+                    output_name, round(test_precision, 4),
+                    output_name, round(test_recall, 4),
+                    output_name, round(test_f1, 4)
+
                 )
             )
 
