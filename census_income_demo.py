@@ -183,7 +183,7 @@ def main():
     model.compile(
         loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
         optimizer=adam_optimizer,
-        metrics=['auc', 'auc']
+        metrics=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']]
     )
 
     # Print out model architecture summary
