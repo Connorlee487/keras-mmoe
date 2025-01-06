@@ -75,14 +75,14 @@ class ROCCallback(Callback):
             train_recall = recall_score(self.train_Y[index], y_pred_train, average="weighted")
             train_f1 = f1_score(self.train_Y[index], y_pred_train, average="weighted")    
 
-            validation_precision = precision_score(self.validation_Y[index], y_pred_validation, average='binary')
-            validation_recall = recall_score(self.validation_Y[index], y_pred_validation, average='binary')
-            validation_f1 = f1_score(self.validation_Y[index], y_pred_validation, average='binary')
+            validation_precision = precision_score(self.validation_Y[index], y_pred_validation, average='weighted')
+            validation_recall = recall_score(self.validation_Y[index], y_pred_validation, average='weighted')
+            validation_f1 = f1_score(self.validation_Y[index], y_pred_validation, average='weighted')
 
 
-            test_precision = precision_score(self.test_Y[index], y_pred_test, average='binary')
-            test_recall = recall_score(self.test_Y[index], y_pred_test, average='binary')
-            test_f1 = f1_score(self.test_Y[index], y_pred_test, average='binary')
+            test_precision = precision_score(self.test_Y[index], y_pred_test, average='weighted')
+            test_recall = recall_score(self.test_Y[index], y_pred_test, average='weighted')
+            test_f1 = f1_score(self.test_Y[index], y_pred_test, average='weighted')
 
             print(
                 'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
