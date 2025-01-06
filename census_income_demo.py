@@ -126,7 +126,7 @@ def data_preparation():
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
                         'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
-                        'THRGRDS', 'STDPROV', 'NETPAY_x'] #PHYFLAG
+                        'THRGRDS', 'STDPROV'] #PHYFLAG
 
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
