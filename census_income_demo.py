@@ -19,7 +19,8 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import roc_auc_score
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import precision_score, recall_score, f1_score
+
 
 
 from mmoe import MMoE
@@ -65,9 +66,18 @@ class ROCCallback(Callback):
             validation_roc_auc = roc_auc_score(self.validation_Y[index], validation_prediction[index])
             test_roc_auc = roc_auc_score(self.test_Y[index], test_prediction[index])
 
-            train_precision, train_recall, train_f1, support = precision_recall_fscore_support(self.train_Y[index], train_prediction[index], average='binary')
-            validation_precision, validation_recall, validation_f1, support_2 = precision_recall_fscore_support(self.validation_Y[index], validation_prediction[index], average='binary')
-            test_precision, test_recall, test_f1, support_2 = precision_recall_fscore_support(self.test_Y[index], test_prediction[index], average='binary')
+            train_precision = precision_score(self.train_Y[index], train_prediction[index], average="weighted")
+            train_recall = recall_score(self.train_Y[index], train_prediction[index], average="weighted")
+            train_f1 = f1_score(self.train_Y[index], train_prediction[index], average="weighted")    
+
+            validation_precision = precision_score(self.validation_Y[index], validation_prediction[index], average='binary')
+            validation_recall = recall_score(self.validation_Y[index], validation_prediction[index], average='binary')
+            validation_f1 = f1_score(self.validation_Y[index], validation_prediction[index], average='binary')
+
+
+            test_precision = precision_score(self.test_Y[index], test_prediction[index], average='binary')
+            test_recall = recall_score(self.test_Y[index], test_prediction[index], average='binary')
+            test_f1 = f1_score(self.test_Y[index], test_prediction[index], average='binary')
 
             print(
                 'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
