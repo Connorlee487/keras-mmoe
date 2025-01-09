@@ -19,9 +19,6 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import roc_auc_score
-from sklearn.metrics import precision_score, recall_score, f1_score
-
-
 
 from mmoe import MMoE
 
@@ -65,43 +62,11 @@ class ROCCallback(Callback):
             train_roc_auc = roc_auc_score(self.train_Y[index], train_prediction[index])
             validation_roc_auc = roc_auc_score(self.validation_Y[index], validation_prediction[index])
             test_roc_auc = roc_auc_score(self.test_Y[index], test_prediction[index])
-
-            threshold = 0.5
-            y_pred_train = (train_prediction[index] >= threshold).astype(int)
-            y_pred_validation = (validation_prediction[index] >= threshold).astype(int)
-            y_pred_test = (test_prediction[index] >= threshold).astype(int)
-
-            train_precision = precision_score(self.train_Y[index], y_pred_train, average="weighted")
-            train_recall = recall_score(self.train_Y[index], y_pred_train, average="weighted")
-            train_f1 = f1_score(self.train_Y[index], y_pred_train, average="weighted")    
-
-            validation_precision = precision_score(self.validation_Y[index], y_pred_validation, average='weighted')
-            validation_recall = recall_score(self.validation_Y[index], y_pred_validation, average='weighted')
-            validation_f1 = f1_score(self.validation_Y[index], y_pred_validation, average='weighted')
-
-
-            test_precision = precision_score(self.test_Y[index], y_pred_test, average='weighted')
-            test_recall = recall_score(self.test_Y[index], y_pred_test, average='weighted')
-            test_f1 = f1_score(self.test_Y[index], y_pred_test, average='weighted')
-
             print(
-                'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
+                'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {}'.format(
                     output_name, round(train_roc_auc, 4),
                     output_name, round(validation_roc_auc, 4),
-                    output_name, round(test_roc_auc, 4),
-
-                    output_name, round(train_precision, 4),
-                    output_name, round(train_recall, 4),
-                    output_name, round(train_f1, 4),
-
-                    output_name, round(validation_precision, 4),
-                    output_name, round(validation_recall, 4),
-                    output_name, round(validation_f1, 4),
-                    
-                    output_name, round(test_precision, 4),
-                    output_name, round(test_recall, 4),
-                    output_name, round(test_f1, 4)
-
+                    output_name, round(test_roc_auc, 4)
                 )
             )
 
@@ -113,46 +78,73 @@ class ROCCallback(Callback):
     def on_batch_end(self, batch, logs={}):
         return
 
+
 def data_preparation():
-    label1 = 'HOSP'
-    label2 = 'RDMIT'
+    # The column names are from
+    # https://www2.1010data.com/documentationcenter/prod/Tutorials/MachineLearningExamples/CensusIncomeDataSet.html
+    column_names = ['age', 'class_worker', 'det_ind_code', 'det_occ_code', 'education', 'wage_per_hour', 'hs_college',
+                    'marital_stat', 'major_ind_code', 'major_occ_code', 'race', 'hisp_origin', 'sex', 'union_member',
+                    'unemp_reason', 'full_or_part_emp', 'capital_gains', 'capital_losses', 'stock_dividends',
+                    'tax_filer_stat', 'region_prev_res', 'state_prev_res', 'det_hh_fam_stat', 'det_hh_summ',
+                    'instance_weight', 'mig_chg_msa', 'mig_chg_reg', 'mig_move_reg', 'mig_same', 'mig_prev_sunbelt',
+                    'num_emp', 'fam_under_18', 'country_father', 'country_mother', 'country_self', 'citizenship',
+                    'own_or_self', 'vet_question', 'vet_benefits', 'weeks_worked', 'year', 'income_50k']
 
-    label_columns = [label1, label2] #HOSP
-    
-    # categorical_columns = ['PROCTYP', 'YEAR', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV',  'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PHYFLAG', 'PRODCAT', 'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 'THRGRDS', 'STDPROV', 'NETPAY_x']
+    # Load the dataset in Pandas
+    train_df = pd.read_csv(
+        '/content/keras-mmoe/data/census-income.data.gz',
+        delimiter=',',
+        header=None,
+        index_col=None,
+        names=column_names
+    )
+    other_df = pd.read_csv(
+        '/content/keras-mmoe/data/census-income.test.gz',
+        delimiter=',',
+        header=None,
+        index_col=None,
+        names=column_names
+    )
 
-    categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
-                        'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
-                        'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
-                        'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
-                        'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
-                        'THRGRDS', 'STDPROV'] #PHYFLAG
+    # First group of tasks according to the paper
+    label_columns = ['income_50k', 'marital_stat']
 
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
-    transformed_train = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
-    transformed_other = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
+    # One-hot encoding categorical columns
+    categorical_columns = ['class_worker', 'det_ind_code', 'det_occ_code', 'education', 'hs_college', 'major_ind_code',
+                           'major_occ_code', 'race', 'hisp_origin', 'sex', 'union_member', 'unemp_reason',
+                           'full_or_part_emp', 'tax_filer_stat', 'region_prev_res', 'state_prev_res', 'det_hh_fam_stat',
+                           'det_hh_summ', 'mig_chg_msa', 'mig_chg_reg', 'mig_move_reg', 'mig_same', 'mig_prev_sunbelt',
+                           'fam_under_18', 'country_father', 'country_mother', 'country_self', 'citizenship',
+                           'vet_question']
+    train_raw_labels = train_df[label_columns]
+    other_raw_labels = other_df[label_columns]
+    transformed_train = pd.get_dummies(train_df.drop(label_columns, axis=1), columns=categorical_columns)
+    transformed_other = pd.get_dummies(other_df.drop(label_columns, axis=1), columns=categorical_columns)
 
-    train_HOSP = to_categorical((train_raw_labels[label1] == 1).astype(int), num_classes=2)
-    train_RDMIT = to_categorical((train_raw_labels[label2] == 1).astype(int), num_classes=2)
+    # Filling the missing column in the other set
+    transformed_other['det_hh_fam_stat_ Grandchild <18 ever marr not in subfamily'] = 0
 
-    other_HOSP = to_categorical((other_raw_labels[label1] == 1).astype(int), num_classes=2)
-    other_RDMIT = to_categorical((other_raw_labels[label2] == 1).astype(int), num_classes=2)
+    # One-hot encoding categorical labels
+    train_income = to_categorical((train_raw_labels.income_50k == ' 50000+.').astype(int), num_classes=2)
+    train_marital = to_categorical((train_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
+    other_income = to_categorical((other_raw_labels.income_50k == ' 50000+.').astype(int), num_classes=2)
+    other_marital = to_categorical((other_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
 
     dict_outputs = {
-        label1: train_HOSP.shape[1],
-        label2: train_RDMIT.shape[1]
+        'income': train_income.shape[1],
+        'marital': train_marital.shape[1]
     }
     dict_train_labels = {
-        label1: train_HOSP,
-        label2: train_RDMIT
+        'income': train_income,
+        'marital': train_marital
     }
     dict_other_labels = {
-        label1: other_HOSP,
-        label2: other_RDMIT
+        'income': other_income,
+        'marital': other_marital
     }
     output_info = [(dict_outputs[key], key) for key in sorted(dict_outputs.keys())]
 
+    # Split the other dataset into 1:1 validation to test according to the paper
     validation_indices = transformed_other.sample(frac=0.5, replace=False, random_state=SEED).index
     test_indices = list(set(transformed_other.index) - set(validation_indices))
     validation_data = transformed_other.iloc[validation_indices]
@@ -162,24 +154,12 @@ def data_preparation():
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    # # Split the other dataset into 1:1 validation to test according to the paper
-    # validation_indices = transformed_other.sample(frac=0.5, replace=False, random_state=SEED).index
-    # test_indices = list(set(transformed_other.index) - set(validation_indices))
-    # validation_data = transformed_other.iloc[validation_indices]
-    # validation_label = [dict_other_labels[key][validation_indices] for key in sorted(dict_other_labels.keys())]
-    # test_data = transformed_other.iloc[test_indices]
-    # test_label = [dict_other_labels[key][test_indices] for key in sorted(dict_other_labels.keys())]
-    # train_data = transformed_train
-    # train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
-
-    return label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
-
-
+    return train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
 
 
 def main():
     # Load the data
-    label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
+    train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
     num_features = train_data.shape[1]
 
     print('Training data shape = {}'.format(train_data.shape))
@@ -215,9 +195,9 @@ def main():
     model = Model(inputs=[input_layer], outputs=output_layers)
     adam_optimizer = Adam()
     model.compile(
-        loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
+        loss={'income': 'binary_crossentropy', 'marital': 'binary_crossentropy'},
         optimizer=adam_optimizer,
-        metrics=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']]
+        metrics=['auc', 'auc']
     )
 
     # Print out model architecture summary
@@ -225,7 +205,7 @@ def main():
 
     # Train the model
     model.fit(
-        x=train_data,   
+        x=train_data,
         y=train_label,
         validation_data=(validation_data, validation_label),
         callbacks=[
