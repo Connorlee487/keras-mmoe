@@ -19,6 +19,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import roc_auc_score
+from sklearn.preprocessing import LabelEncoder
 
 from mmoe import MMoE
 
@@ -77,6 +78,15 @@ class ROCCallback(Callback):
 
     def on_batch_end(self, batch, logs={}):
         return
+    
+
+def label_encode_df(df):
+    label_encoders = {}
+    for column in df.columns:
+        encoder = LabelEncoder()
+        df[column] = encoder.fit_transform(df[column])
+        label_encoders[column] = encoder
+    return df
 
 
 def data_preparation():
@@ -116,10 +126,11 @@ def data_preparation():
                            'det_hh_summ', 'mig_chg_msa', 'mig_chg_reg', 'mig_move_reg', 'mig_same', 'mig_prev_sunbelt',
                            'fam_under_18', 'country_father', 'country_mother', 'country_self', 'citizenship',
                            'vet_question']
+    
     train_raw_labels = train_df[label_columns]
     other_raw_labels = other_df[label_columns]
-    transformed_train = pd.get_dummies(train_df.drop(label_columns, axis=1), columns=categorical_columns)
-    transformed_other = pd.get_dummies(other_df.drop(label_columns, axis=1), columns=categorical_columns)
+    transformed_train = train_df[categorical_columns]
+    transformed_other = other_df[categorical_columns]
 
     # Filling the missing column in the other set
     transformed_other['det_hh_fam_stat_ Grandchild <18 ever marr not in subfamily'] = 0
@@ -129,6 +140,11 @@ def data_preparation():
     train_marital = to_categorical((train_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
     other_income = to_categorical((other_raw_labels.income_50k == ' 50000+.').astype(int), num_classes=2)
     other_marital = to_categorical((other_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
+
+    train_income = label_encode_df(train_income)
+    train_marital = label_encode_df(train_marital)
+    other_income = label_encode_df(other_income)
+    other_marital = label_encode_df(other_marital)
 
     dict_outputs = {
         'income': train_income.shape[1],
@@ -166,15 +182,30 @@ def main():
     print('Validation data shape = {}'.format(validation_data.shape))
     print('Test data shape = {}'.format(test_data.shape))
 
-    # Set up the input layer
-    input_layer = Input(shape=(num_features,))
+    # Define embedding size for each categorical feature
+    embedding_sizes = {col: len(train_data[col].unique()) for col in train_data.columns}
+
+    # Define input and embedding layers for all categorical features
+    categorical_inputs = []
+    categorical_embeddings = []
+    for feature, input_dim in embedding_sizes.items():
+        # Input layer for each categorical feature
+        input_layer = Input(shape=(1,), name=f"{feature}_input")
+        # Embedding layer for the feature
+        embedding_layer = Embedding(input_dim=input_dim, output_dim=min(50, input_dim // 2 + 1), name=f"{feature}_embedding")(input_layer)
+        flattened_embedding = Flatten()(embedding_layer)
+        # Append input and embedding layers
+        categorical_inputs.append(input_layer)
+        categorical_embeddings.append(flattened_embedding)
+
+    combined_embeddings = Concatenate()(categorical_embeddings)
 
     # Set up MMoE layer
     mmoe_layers = MMoE(
         units=4,
         num_experts=8,
         num_tasks=2
-    )(input_layer)
+    )(combined_embeddings)
 
     output_layers = []
 
@@ -202,6 +233,12 @@ def main():
 
     # Print out model architecture summary
     model.summary()
+
+
+    train_inputs = {f"{col}_input": train_data[col].values for col in train_data.columns}
+    validation_inputs = {f"{col}_input": validation_data[col].values for col in validation_data.columns}
+    test_inputs = {f"{col}_input": test_data[col].values for col in test_data.columns}
+
 
     # Train the model
     model.fit(
