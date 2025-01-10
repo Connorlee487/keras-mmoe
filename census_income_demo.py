@@ -14,7 +14,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import VarianceScaling
-from tensorflow.keras.layers import Input, Dense
+from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Flatten
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
@@ -141,10 +141,8 @@ def data_preparation():
     other_income = to_categorical((other_raw_labels.income_50k == ' 50000+.').astype(int), num_classes=2)
     other_marital = to_categorical((other_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
 
-    train_income = label_encode_df(train_income)
-    train_marital = label_encode_df(train_marital)
-    other_income = label_encode_df(other_income)
-    other_marital = label_encode_df(other_marital)
+    transformed_train = label_encode_df(transformed_train)
+    transformed_other = label_encode_df(transformed_other)
 
     dict_outputs = {
         'income': train_income.shape[1],
@@ -172,7 +170,6 @@ def data_preparation():
 
     return train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
 
-
 def main():
     # Load the data
     train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
@@ -182,30 +179,15 @@ def main():
     print('Validation data shape = {}'.format(validation_data.shape))
     print('Test data shape = {}'.format(test_data.shape))
 
-    # Define embedding size for each categorical feature
-    embedding_sizes = {col: len(train_data[col].unique()) for col in train_data.columns}
-
-    # Define input and embedding layers for all categorical features
-    categorical_inputs = []
-    categorical_embeddings = []
-    for feature, input_dim in embedding_sizes.items():
-        # Input layer for each categorical feature
-        input_layer = Input(shape=(1,), name=f"{feature}_input")
-        # Embedding layer for the feature
-        embedding_layer = Embedding(input_dim=input_dim, output_dim=min(50, input_dim // 2 + 1), name=f"{feature}_embedding")(input_layer)
-        flattened_embedding = Flatten()(embedding_layer)
-        # Append input and embedding layers
-        categorical_inputs.append(input_layer)
-        categorical_embeddings.append(flattened_embedding)
-
-    combined_embeddings = Concatenate()(categorical_embeddings)
+    # Set up the input layer
+    input_layer = Input(shape=(num_features,))
 
     # Set up MMoE layer
     mmoe_layers = MMoE(
         units=4,
         num_experts=8,
         num_tasks=2
-    )(combined_embeddings)
+    )(input_layer)
 
     output_layers = []
 
@@ -233,12 +215,6 @@ def main():
 
     # Print out model architecture summary
     model.summary()
-
-
-    train_inputs = {f"{col}_input": train_data[col].values for col in train_data.columns}
-    validation_inputs = {f"{col}_input": validation_data[col].values for col in validation_data.columns}
-    test_inputs = {f"{col}_input": test_data[col].values for col in test_data.columns}
-
 
     # Train the model
     model.fit(
