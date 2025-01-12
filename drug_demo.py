@@ -14,14 +14,13 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import VarianceScaling
-from tensorflow.keras.layers import Input, Dense
+from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Flatten, GlobalAveragePooling1D
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import precision_score, recall_score, f1_score
-
-
+from keras_tuner import Hyperband
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
+from sklearn.preprocessing import LabelEncoder
 
 from mmoe import MMoE
 
@@ -126,7 +125,7 @@ def data_preparation():
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
                         'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
-                        'THRGRDS', 'STDPROV'] #PHYFLAG
+                        'THRGRDS', 'STDPROV', 'PHYFLAG']
 
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
@@ -162,15 +161,6 @@ def data_preparation():
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    # # Split the other dataset into 1:1 validation to test according to the paper
-    # validation_indices = transformed_other.sample(frac=0.5, replace=False, random_state=SEED).index
-    # test_indices = list(set(transformed_other.index) - set(validation_indices))
-    # validation_data = transformed_other.iloc[validation_indices]
-    # validation_label = [dict_other_labels[key][validation_indices] for key in sorted(dict_other_labels.keys())]
-    # test_data = transformed_other.iloc[test_indices]
-    # test_label = [dict_other_labels[key][test_indices] for key in sorted(dict_other_labels.keys())]
-    # train_data = transformed_train
-    # train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
     return label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
 
@@ -180,21 +170,27 @@ def data_preparation():
 def main():
     # Load the data
     label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
-    num_features = train_data.shape[1]
 
     print('Training data shape = {}'.format(train_data.shape))
     print('Validation data shape = {}'.format(validation_data.shape))
     print('Test data shape = {}'.format(test_data.shape))
 
+
+    num_features = train_data.shape[1]
+
     # Set up the input layer
     input_layer = Input(shape=(num_features,))
+
+    embedding_dim = 8
+    embedding_layer = Embedding(input_dim=500, output_dim=embedding_dim)(input_layer)
+    pooled_output = GlobalAveragePooling1D()(embedding_layer)
 
     # Set up MMoE layer
     mmoe_layers = MMoE(
         units=4,
         num_experts=8,
         num_tasks=2
-    )(input_layer)
+    )(pooled_output)
 
     output_layers = []
 
@@ -237,6 +233,10 @@ def main():
         ],
         epochs=100
     )
+
+
+
+
 
 
 if __name__ == '__main__':

@@ -102,14 +102,14 @@ def data_preparation():
 
     # Load the dataset in Pandas
     train_df = pd.read_csv(
-        '/content/keras-mmoe/data/census-income.data.gz',
+        'data/census-income.data.gz',
         delimiter=',',
         header=None,
         index_col=None,
         names=column_names
     )
     other_df = pd.read_csv(
-        '/content/keras-mmoe/data/census-income.test.gz',
+        'data/census-income.test.gz',
         delimiter=',',
         header=None,
         index_col=None,
@@ -126,11 +126,10 @@ def data_preparation():
                            'det_hh_summ', 'mig_chg_msa', 'mig_chg_reg', 'mig_move_reg', 'mig_same', 'mig_prev_sunbelt',
                            'fam_under_18', 'country_father', 'country_mother', 'country_self', 'citizenship',
                            'vet_question']
-    
     train_raw_labels = train_df[label_columns]
     other_raw_labels = other_df[label_columns]
-    transformed_train = train_df[categorical_columns]
-    transformed_other = other_df[categorical_columns]
+    transformed_train = pd.get_dummies(train_df.drop(label_columns, axis=1), columns=categorical_columns)
+    transformed_other = pd.get_dummies(other_df.drop(label_columns, axis=1), columns=categorical_columns)
 
     # Filling the missing column in the other set
     transformed_other['det_hh_fam_stat_ Grandchild <18 ever marr not in subfamily'] = 0
@@ -140,9 +139,6 @@ def data_preparation():
     train_marital = to_categorical((train_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
     other_income = to_categorical((other_raw_labels.income_50k == ' 50000+.').astype(int), num_classes=2)
     other_marital = to_categorical((other_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
-
-    transformed_train = label_encode_df(transformed_train)
-    transformed_other = label_encode_df(transformed_other)
 
     dict_outputs = {
         'income': train_income.shape[1],
@@ -169,6 +165,7 @@ def data_preparation():
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
     return train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
+
 
 def main():
     # Load the data
