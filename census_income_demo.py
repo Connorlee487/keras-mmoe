@@ -103,14 +103,14 @@ def data_preparation():
 
     # Load the dataset in Pandas
     train_df = pd.read_csv(
-        'data/census-income.data.gz',
+        '/content/keras-mmoe/data/census-income.data.gz',
         delimiter=',',
         header=None,
         index_col=None,
         names=column_names
     )
     other_df = pd.read_csv(
-        'data/census-income.test.gz',
+        '/content/keras-mmoe/data/census-income.test.gz',
         delimiter=',',
         header=None,
         index_col=None,
