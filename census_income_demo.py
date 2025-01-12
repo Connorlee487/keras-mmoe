@@ -21,7 +21,7 @@ from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import LabelEncoder
 
-from keras_tuner import Hyperband
+from keras_tuner import RandomSearch
 from mmoe import MMoE
 
 SEED = 1
@@ -208,18 +208,17 @@ def main():
         learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
         model = Model(inputs=[input_layer], outputs=output_layers)
         model.compile(
-            loss={'MARITAL': 'binary_crossentropy', 'INCOME': 'binary_crossentropy'},
+            loss={'income': 'binary_crossentropy', 'marital': 'binary_crossentropy'},
             optimizer=Adam(learning_rate=learning_rate),
             metrics=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']]
         )
         return model
     
     # Initialize the tuner
-    tuner = Hyperband(
+    tuner = RandomSearch(
         build_model,
         objective=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']],
-        max_epochs=10,
-        factor=3,
+        max_trials=8,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning'
     )
@@ -235,7 +234,8 @@ def main():
                 validation_data=(validation_data, validation_label),
                 test_data=(test_data, test_label)
             )
-        ]
+        ],
+
     )
     
     # Retrieve the best model and hyperparameters
