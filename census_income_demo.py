@@ -14,13 +14,14 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import VarianceScaling
-from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Flatten
+from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Flatten, GlobalAveragePooling1D
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import LabelEncoder
 
+from keras_tuner import Hyperband
 from mmoe import MMoE
 
 SEED = 1
@@ -170,51 +171,61 @@ def data_preparation():
 def main():
     # Load the data
     train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
-    num_features = train_data.shape[1]
-
-    print('Training data shape = {}'.format(train_data.shape))
-    print('Validation data shape = {}'.format(validation_data.shape))
-    print('Test data shape = {}'.format(test_data.shape))
-
-    # Set up the input layer
-    input_layer = Input(shape=(num_features,))
-
-    # Set up MMoE layer
-    mmoe_layers = MMoE(
-        units=4,
-        num_experts=8,
-        num_tasks=2
-    )(input_layer)
-
-    output_layers = []
-
-    # Build tower layer from MMoE layer
-    for index, task_layer in enumerate(mmoe_layers):
-        tower_layer = Dense(
-            units=8,
-            activation='relu',
-            kernel_initializer=VarianceScaling())(task_layer)
-        output_layer = Dense(
-            units=output_info[index][0],
-            name=output_info[index][1],
-            activation='softmax',
-            kernel_initializer=VarianceScaling())(tower_layer)
-        output_layers.append(output_layer)
-
-    # Compile model
-    model = Model(inputs=[input_layer], outputs=output_layers)
-    adam_optimizer = Adam()
-    model.compile(
-        loss={'income': 'binary_crossentropy', 'marital': 'binary_crossentropy'},
-        optimizer=adam_optimizer,
-        metrics=['auc', 'auc']
+    
+    # Define the hyperparameter tuning process
+    def build_model(hp):
+        num_features = train_data.shape[1]
+        input_layer = Input(shape=(num_features,))
+        
+        # Hyperparameter tuning
+        embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
+        embedding_layer = Embedding(input_dim=500, output_dim=embedding_dim)(input_layer)
+        pooled_output = GlobalAveragePooling1D()(embedding_layer)
+        
+        # MMoE layer
+        mmoe_layers = MMoE(
+            units=hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
+            num_experts=hp.Int('num_experts', min_value=4, max_value=12, step=4),
+            num_tasks=2
+        )(pooled_output)
+        
+        output_layers = []
+        for index, task_layer in enumerate(mmoe_layers):
+            tower_units = hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
+            tower_layer = Dense(
+                units=tower_units,
+                activation='relu',
+                kernel_initializer=VarianceScaling())(task_layer)
+            
+            output_layer = Dense(
+                units=output_info[index][0],
+                name=output_info[index][1],
+                activation='softmax',
+                kernel_initializer=VarianceScaling())(tower_layer)
+            output_layers.append(output_layer)
+        
+        # Compile the model
+        learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
+        model = Model(inputs=[input_layer], outputs=output_layers)
+        model.compile(
+            loss={'MARITAL': 'binary_crossentropy', 'INCOME': 'binary_crossentropy'},
+            optimizer=Adam(learning_rate=learning_rate),
+            metrics=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']]
+        )
+        return model
+    
+    # Initialize the tuner
+    tuner = Hyperband(
+        build_model,
+        objective=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']],
+        max_epochs=10,
+        factor=3,
+        directory='my_dir',
+        project_name='mmoe_hyperparameter_tuning'
     )
-
-    # Print out model architecture summary
-    model.summary()
-
-    # Train the model
-    model.fit(
+    
+    # Run the hyperparameter search
+    tuner.search(
         x=train_data,
         y=train_label,
         validation_data=(validation_data, validation_label),
@@ -224,8 +235,30 @@ def main():
                 validation_data=(validation_data, validation_label),
                 test_data=(test_data, test_label)
             )
-        ],
-        epochs=100
+        ]
+    )
+    
+    # Retrieve the best model and hyperparameters
+    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+    best_model = tuner.get_best_models(num_models=1)[0]
+    
+    print("Best hyperparameters found:")
+    for key, value in best_hps.values.items():
+        print(f"{key}: {value}")
+    
+    # Train the best model further
+    best_model.fit(
+        x=train_data,
+        y=train_label,
+        validation_data=(validation_data, validation_label),
+        epochs=100,
+        callbacks=[
+            ROCCallback(
+                training_data=(train_data, train_label),
+                validation_data=(validation_data, validation_label),
+                test_data=(test_data, test_label)
+            )
+        ]
     )
 
 
