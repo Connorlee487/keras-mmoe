@@ -24,6 +24,8 @@ from sklearn.preprocessing import LabelEncoder
 
 from mmoe import MMoE
 
+from keras_tuner import RandomSearch
+
 SEED = 1
 
 # Fix numpy seed for reproducibility
