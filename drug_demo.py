@@ -220,14 +220,14 @@ def main():
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
             optimizer=Adam(learning_rate=learning_rate),
-            metrics=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']]
+            metrics={label1: ['precision'], label2: ['precision']}
         )
         return model
     
     # Initialize the tuner
     tuner = RandomSearch(
         build_model,
-        objective=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']],
+        objective={label1: ['val_precision'], label2: ['val_precision']},
         max_trials=8,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning'
