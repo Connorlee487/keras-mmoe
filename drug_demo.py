@@ -113,6 +113,14 @@ class ROCCallback(Callback):
 
     def on_batch_end(self, batch, logs={}):
         return
+    
+def label_encode_df(df):
+    label_encoders = {}
+    for column in df.columns:
+        encoder = LabelEncoder()
+        df[column] = encoder.fit_transform(df[column])
+        label_encoders[column] = encoder
+    return df
 
 def data_preparation():
     label1 = 'HOSP'
@@ -133,6 +141,9 @@ def data_preparation():
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
     transformed_train = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
     transformed_other = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
+
+    transformed_train = label_encode_df(transformed_train)
+    transformed_other = label_encode_df(transformed_other)
 
     train_HOSP = to_categorical((train_raw_labels[label1] == 1).astype(int), num_classes=2)
     train_RDMIT = to_categorical((train_raw_labels[label2] == 1).astype(int), num_classes=2)
