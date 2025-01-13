@@ -21,7 +21,7 @@ from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import LabelEncoder
 
-from keras_tuner import RandomSearch
+from keras_tuner import RandomSearch, Hyperband 
 from mmoe import MMoE
 
 SEED = 1
@@ -129,11 +129,16 @@ def data_preparation():
                            'vet_question']
     train_raw_labels = train_df[label_columns]
     other_raw_labels = other_df[label_columns]
-    transformed_train = train_df[categorical_columns]
-    transformed_other = other_df[categorical_columns]
 
-    transformed_train = label_encode_df(transformed_train)
-    transformed_other = label_encode_df(transformed_other)
+    transformed_train = pd.get_dummies(train_df.drop(label_columns, axis=1), columns=categorical_columns)
+    transformed_other = pd.get_dummies(other_df.drop(label_columns, axis=1), columns=categorical_columns)
+    
+    # transformed_train = train_df[categorical_columns]
+    # transformed_other = other_df[categorical_columns]
+
+    # transformed_train = label_encode_df(transformed_train)
+    # transformed_other = label_encode_df(transformed_other)
+
 
     # Filling the missing column in the other set
     transformed_other['det_hh_fam_stat_ Grandchild <18 ever marr not in subfamily'] = 0
@@ -218,7 +223,7 @@ def main():
         return model
     
     # Initialize the tuner
-    tuner = RandomSearch(
+    tuner = Hyperband(
         build_model,
         objective=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']],
         max_trials=8,
