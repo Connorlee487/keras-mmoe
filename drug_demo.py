@@ -11,6 +11,9 @@ import random
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+import keras
+import keras_tuner
+
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import VarianceScaling
@@ -129,13 +132,12 @@ def data_preparation():
     label_columns = [label1, label2] #HOSP
     
     # categorical_columns = ['PROCTYP', 'YEAR', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV',  'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PHYFLAG', 'PRODCAT', 'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 'THRGRDS', 'STDPROV', 'NETPAY_x']
-
     categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
                         'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
                         'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
-                        'THRGRDS', 'STDPROV', 'PHYFLAG']
+                        'THRGRDS', 'PHYFLAG']
 
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
@@ -173,6 +175,10 @@ def data_preparation():
     test_label = [dict_other_labels[key][test_indices] for key in sorted(dict_other_labels.keys())]
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
+
+    train_data = train_data[categorical_columns]
+    validation_data = validation_data[categorical_columns]
+    test_data = test_data[categorical_columns]
 
 
     return label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
@@ -226,11 +232,12 @@ def main():
     
     # Initialize the tuner
     tuner = RandomSearch(
-        build_model,
-        objective={label1: ['val_precision'], label2: ['val_precision']},
-        max_trials=8,
+        build_model, 
+        objective=[keras_tuner.Objective('HOSP_precision', direction='max'), keras_tuner.Objective('RDMIT_precision', direction='max')],
+        max_trials=1,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning'
+        # overwrite=True 
     )
     
     # Run the hyperparameter search
@@ -238,12 +245,12 @@ def main():
         x=train_data,
         y=train_label,
         validation_data=(validation_data, validation_label),
-        callbacks=[
-            ROCCallback(
-                training_data=(train_data, train_label),
-                validation_data=(validation_data, validation_label),
-                test_data=(test_data, test_label)
-            )
+        callbacks=[keras.callbacks.EarlyStopping(monitor="HOSP_precision", mode='max'),keras.callbacks.EarlyStopping(monitor="RDMIT_precision", mode='max')
+            # ROCCallback(
+            #     training_data=(train_data, train_label),
+            #     validation_data=(validation_data, validation_label),
+            #     test_data=(test_data, test_label)
+            # )
         ],
 
     )
