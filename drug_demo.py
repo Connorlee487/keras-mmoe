@@ -43,6 +43,7 @@ tf.random.set_seed(SEED)
 # Simple callback to print out ROC-AUC
 class ROCCallback(Callback):
     def __init__(self, training_data, validation_data, test_data):
+
         self.train_X = training_data[0]
         self.train_Y = training_data[1]
         self.validation_X = validation_data[0]
@@ -64,6 +65,11 @@ class ROCCallback(Callback):
         train_prediction = self.model.predict(self.train_X)
         validation_prediction = self.model.predict(self.validation_X)
         test_prediction = self.model.predict(self.test_X)
+
+        print(f"EPOCH {epoch+1}")
+        for task_name in logs:
+            if 'loss' in task_name:
+                print(f"NAME: {task_name} -- LOSS: {logs[task_name]:.4f}")
 
         # Iterate through each task and output their ROC-AUC across different datasets
         for index, output_name in enumerate(self.model.output_names):
@@ -90,25 +96,40 @@ class ROCCallback(Callback):
             test_f1 = f1_score(self.test_Y[index], y_pred_test, average='weighted')
 
             print(
-                'LOSS: {} ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
-                    current_loss, output_name, round(train_roc_auc, 4),
-                    output_name, round(validation_roc_auc, 4),
-                    output_name, round(test_roc_auc, 4),
+               'ROC-AUC-{}-Train: {} Precision-{}-Train: {} Recall-{}-Train: {} \nROC-AUC-{}-Validation: {} \nROC-AUC-{}-Test: {} Precision-{}-Test: {} Recall-{}-Test: {} \n'.format(
+                output_name, round(train_roc_auc, 4),
+                output_name, round(train_precision, 4),
+                output_name, round(train_recall, 4),
 
-                    output_name, round(train_precision, 4),
-                    output_name, round(train_recall, 4),
-                    output_name, round(train_f1, 4),
+                output_name, round(validation_roc_auc, 4),
 
-                    output_name, round(validation_precision, 4),
-                    output_name, round(validation_recall, 4),
-                    output_name, round(validation_f1, 4),
-                    
-                    output_name, round(test_precision, 4),
-                    output_name, round(test_recall, 4),
-                    output_name, round(test_f1, 4)
-
-                )
+                output_name, round(test_roc_auc, 4),
+                output_name, round(test_precision, 4),
+                output_name, round(test_recall, 4),
+               )
             )
+
+
+            # print(
+            #     'LOSS: {} ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
+            #         current_loss, output_name, round(train_roc_auc, 4),
+            #         output_name, round(validation_roc_auc, 4),
+            #         output_name, round(test_roc_auc, 4),
+
+            #         output_name, round(train_precision, 4),
+            #         output_name, round(train_recall, 4),
+            #         output_name, round(train_f1, 4),
+
+            #         output_name, round(validation_precision, 4),
+            #         output_name, round(validation_recall, 4),
+            #         output_name, round(validation_f1, 4),
+                    
+            #         output_name, round(test_precision, 4),
+            #         output_name, round(test_recall, 4),
+            #         output_name, round(test_f1, 4)
+
+            #     )
+            # )
 
         return
 
@@ -147,11 +168,17 @@ def data_preparation():
     transformed_train = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
     transformed_other = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
 
-    cat_size = []
-    transformed_train = label_encode_df(transformed_train, cat_size)
+    transformed_train = transformed_train[categorical_columns]
+    transformed_other = transformed_other[categorical_columns]
 
-    cat_size = []
-    transformed_other = label_encode_df(transformed_other, cat_size)
+
+    cat_size_train = []
+    transformed_train, cat_size = label_encode_df(transformed_train, cat_size_train)
+
+    cat_size_other = []
+    transformed_other, cat_size = label_encode_df(transformed_other, cat_size_other)
+
+    cat_size = np.maximum(cat_size_train, cat_size_other)
 
     train_HOSP = to_categorical((train_raw_labels[label1] == 1).astype(int), num_classes=2)
     train_RDMIT = to_categorical((train_raw_labels[label2] == 1).astype(int), num_classes=2)
@@ -189,13 +216,13 @@ def data_preparation():
 
     return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns
 
-
 def main():
     # Load the data
     cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols = data_preparation()
     
+    
     # Define the hyperparameter tuning process
-    def build_model(hp):
+    def build_model(): # hp
         num_features = train_data.shape[1]
         # input_layer = Input(shape=(num_features,))
 
@@ -203,13 +230,14 @@ def main():
         inputs = []
 
         for i, size in enumerate(cat_size):
-            input_layer = Input(shape=(1,), name=cat_cols[i])
+            input_layer = Input(shape=(1,), name=str(i))
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
             # embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
-            embedding_layer = Embedding(input_dim=size, output_dim=min(50, size // 2))(input_layer)
+            embedding_layer = Embedding(input_dim=size + 1, output_dim=16)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
+      
 
         # pooled_output = GlobalAveragePooling1D()(embedding_layer)
         concat_layer = Concatenate()(embeddings)
@@ -238,7 +266,7 @@ def main():
         
         # Compile the model
         # learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
-        model = Model(inputs=[input_layer], outputs=output_layers)
+        model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
             optimizer=Adam(), #learning_rate=learning_rate),
@@ -246,55 +274,62 @@ def main():
         )
         return model
     
-    # Initialize the tuner
-    tuner = RandomSearch(
-        build_model, 
-        objective=[keras_tuner.Objective('HOSP_precision', direction='max'), keras_tuner.Objective('RDMIT_precision', direction='max')],
-        max_trials=1,
-        directory='my_dir',
-        project_name='mmoe_hyperparameter_tuning',
-        overwrite=False
-    )
+    # # Initialize the tuner
+    # tuner = RandomSearch(
+    #     build_model, 
+    #     objective=[keras_tuner.Objective('HOSP_precision', direction='max'), keras_tuner.Objective('RDMIT_precision', direction='max')],
+    #     max_trials=1,
+    #     directory='my_dir',
+    #     project_name='mmoe_hyperparameter_tuning',
+    #     overwrite=False
+    # )
     
-    # Run the hyperparameter search
-    tuner.search(
-        x=train_data,
-        y=train_label,
-        validation_data=(validation_data, validation_label),
-        callbacks=[keras.callbacks.EarlyStopping(monitor="HOSP_precision", mode='max'),keras.callbacks.EarlyStopping(monitor="RDMIT_precision", mode='max')
-            # ROCCallback(
-            #     training_data=(train_data, train_label),
-            #     validation_data=(validation_data, validation_label),
-            #     test_data=(test_data, test_label)
-            # )
-        ],
+    # # Run the hyperparameter search
+    # tuner.search(
+    #     x=train_data,
+    #     y=train_label,
+    #     validation_data=(validation_data, validation_label),
+    #     callbacks=[keras.callbacks.EarlyStopping(monitor="HOSP_precision", mode='max'),keras.callbacks.EarlyStopping(monitor="RDMIT_precision", mode='max')
+    #         # ROCCallback(
+    #         #     training_data=(train_data, train_label),
+    #         #     validation_data=(validation_data, validation_label),
+    #         #     test_data=(test_data, test_label)
+    #         # )
+    #     ],
 
-    )
+    # )
     
-    # Retrieve the best model and hyperparameters
-    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
-    best_model = tuner.get_best_models(num_models=1)[0]
+    # # Retrieve the best model and hyperparameters
+    # best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+    # best_model = tuner.get_best_models(num_models=1)[0]
     
-    print("Best hyperparameters found:")
-    for key, value in best_hps.values.items():
-        print(f"{key}: {value}")
+    # print("Best hyperparameters found:")
+    # for key, value in best_hps.values.items():
+    #     print(f"{key}: {value}")
+
+    best_model = build_model()
+
+    best_model.summary()
+
+    train_inputs = [train_data.iloc[:, i].values for i in range(train_data.shape[1])]
+    validation_inputs = [validation_data.iloc[:, i].values for i in range(validation_data.shape[1])]
+    test_inputs = [test_data.iloc[:, i].values for i in range(test_data.shape[1])]
     
     # Train the best model further
+    
     best_model.fit(
-        x=train_data,
+        x=train_inputs,
         y=train_label,
-        validation_data=(validation_data, validation_label),
+        validation_data=(validation_inputs, validation_label),
         epochs=100,
         callbacks=[
             ROCCallback(
-                training_data=(train_data, train_label),
-                validation_data=(validation_data, validation_label),
-                test_data=(test_data, test_label)
+                training_data=(train_inputs, train_label),
+                validation_data=(validation_inputs, validation_label),
+                test_data=(test_inputs, test_label)
             )
         ]
     )
-
-
 
 
 if __name__ == '__main__':
