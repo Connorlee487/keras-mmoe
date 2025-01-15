@@ -60,6 +60,7 @@ class ROCCallback(Callback):
         return
 
     def on_epoch_end(self, epoch, logs={}):
+        current_loss = logs['loss'] 
         train_prediction = self.model.predict(self.train_X)
         validation_prediction = self.model.predict(self.validation_X)
         test_prediction = self.model.predict(self.test_X)
@@ -89,8 +90,8 @@ class ROCCallback(Callback):
             test_f1 = f1_score(self.test_Y[index], y_pred_test, average='weighted')
 
             print(
-                'ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
-                    output_name, round(train_roc_auc, 4),
+                'LOSS: {} ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
+                    current_loss, output_name, round(train_roc_auc, 4),
                     output_name, round(validation_roc_auc, 4),
                     output_name, round(test_roc_auc, 4),
 
@@ -117,13 +118,15 @@ class ROCCallback(Callback):
     def on_batch_end(self, batch, logs={}):
         return
     
-def label_encode_df(df):
+def label_encode_df(df, sizes):
     label_encoders = {}
+
     for column in df.columns:
         encoder = LabelEncoder()
         df[column] = encoder.fit_transform(df[column])
         label_encoders[column] = encoder
-    return df
+        sizes.append(len(encoder.classes_))
+    return df, sizes
 
 def data_preparation():
     label1 = 'HOSP'
@@ -144,8 +147,11 @@ def data_preparation():
     transformed_train = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
     transformed_other = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
 
-    transformed_train = label_encode_df(transformed_train)
-    transformed_other = label_encode_df(transformed_other)
+    cat_size = []
+    transformed_train = label_encode_df(transformed_train, cat_size)
+
+    cat_size = []
+    transformed_other = label_encode_df(transformed_other, cat_size)
 
     train_HOSP = to_categorical((train_raw_labels[label1] == 1).astype(int), num_classes=2)
     train_RDMIT = to_categorical((train_raw_labels[label2] == 1).astype(int), num_classes=2)
@@ -181,33 +187,43 @@ def data_preparation():
     test_data = test_data[categorical_columns]
 
 
-    return label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
+    return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns
 
 
 def main():
     # Load the data
-    label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
+    cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols = data_preparation()
     
     # Define the hyperparameter tuning process
     def build_model(hp):
         num_features = train_data.shape[1]
-        input_layer = Input(shape=(num_features,))
+        # input_layer = Input(shape=(num_features,))
+
+        embeddings = []
+        inputs = []
+
+        for i, size in enumerate(cat_size):
+            input_layer = Input(shape=(1,), name=cat_cols[i])
+            inputs.append(input_layer) 
         
-        # Hyperparameter tuning
-        embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
-        embedding_layer = Embedding(input_dim=500, output_dim=embedding_dim)(input_layer)
-        pooled_output = GlobalAveragePooling1D()(embedding_layer)
+            # Hyperparameter tuning
+            # embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
+            embedding_layer = Embedding(input_dim=size, output_dim=min(50, size // 2))(input_layer)
+            embeddings.append(Flatten()(embedding_layer))
+
+        # pooled_output = GlobalAveragePooling1D()(embedding_layer)
+        concat_layer = Concatenate()(embeddings)
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
-            num_experts=hp.Int('num_experts', min_value=4, max_value=12, step=4),
+            units=8 ,#hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
+            num_experts=4 ,#hp.Int('num_experts', min_value=4, max_value=12, step=4),
             num_tasks=2
-        )(pooled_output)
+        )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
-            tower_units = hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
+            tower_units =16 #hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
@@ -221,11 +237,11 @@ def main():
             output_layers.append(output_layer)
         
         # Compile the model
-        learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
+        # learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
         model = Model(inputs=[input_layer], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
-            optimizer=Adam(learning_rate=learning_rate),
+            optimizer=Adam(), #learning_rate=learning_rate),
             metrics={label1: ['precision'], label2: ['precision']}
         )
         return model
@@ -236,8 +252,8 @@ def main():
         objective=[keras_tuner.Objective('HOSP_precision', direction='max'), keras_tuner.Objective('RDMIT_precision', direction='max')],
         max_trials=1,
         directory='my_dir',
-        project_name='mmoe_hyperparameter_tuning'
-        # overwrite=True 
+        project_name='mmoe_hyperparameter_tuning',
+        overwrite=False
     )
     
     # Run the hyperparameter search
@@ -277,8 +293,6 @@ def main():
             )
         ]
     )
-
-
 
 
 

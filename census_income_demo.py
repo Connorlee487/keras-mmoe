@@ -10,6 +10,8 @@ import random
 
 import pandas as pd
 import numpy as np
+import keras_tuner
+import keras
 import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
@@ -218,14 +220,14 @@ def main():
         model.compile(
             loss={'income': 'binary_crossentropy', 'marital': 'binary_crossentropy'},
             optimizer=Adam(learning_rate=learning_rate),
-            metrics=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']]
+            metrics=[['precision'], ['precision']]
         )
         return model
     
     # Initialize the tuner
-    tuner = Hyperband(
+    tuner = RandomSearch(
         build_model,
-        objective=[['auc', 'precision', 'recall'], ['auc', 'precision', 'recall']],
+        objective=[[keras_tuner.Objective('income_precision', direction='max'), keras_tuner.Objective('marital_precision', direction='max')]],
         max_trials=8,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning'
@@ -236,13 +238,7 @@ def main():
         x=train_data,
         y=train_label,
         validation_data=(validation_data, validation_label),
-        callbacks=[
-            ROCCallback(
-                training_data=(train_data, train_label),
-                validation_data=(validation_data, validation_label),
-                test_data=(test_data, test_label)
-            )
-        ],
+        callbacks=[keras.callbacks.EarlyStopping(monitor="income_precision", mode='max'),keras.callbacks.EarlyStopping(monitor="marital_precision", mode='max')],
 
     )
     
