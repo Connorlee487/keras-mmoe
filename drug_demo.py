@@ -13,6 +13,9 @@ import numpy as np
 import tensorflow as tf
 import keras
 import keras_tuner
+import matplotlib.pyplot as plt
+
+from tensorflow.keras.regularizers import l2
 
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
@@ -254,17 +257,19 @@ def main():
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
-                kernel_initializer=VarianceScaling())(task_layer)
+                kernel_initializer=VarianceScaling(),
+                kernel_regularizer=l2(0.01))(task_layer)
             
             output_layer = Dense(
                 units=output_info[index][0],
                 name=output_info[index][1],
                 activation='softmax',
-                kernel_initializer=VarianceScaling())(tower_layer)
+                kernel_initializer=VarianceScaling(),
+                kernel_regularizer=l2(0.01))(tower_layer)
             output_layers.append(output_layer)
         
         # Compile the model
-        learning_rate = hp.Choice('learning_rate', values=[1e-3, 1e-4, 1e-5])
+        learning_rate = hp.Choice('learning_rate', values=[0.001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
@@ -281,9 +286,9 @@ def main():
     tuner = RandomSearch(
         build_model, 
         objective=[keras_tuner.Objective('HOSP_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')],
-        max_trials=15,
+        max_trials=1,
         directory='my_dir',
-        project_name='mmoe_hyperparameter_tuning' #,
+        project_name='mmoe_hyperparameter_tuning' #, 
         # overwrite=True
     )
     
@@ -299,12 +304,14 @@ def main():
             #     test_data=(test_data, test_label)
             # )
         ],
-        batch_size = 16
+        batch_size = 8
     )
     
     # Retrieve the best model and hyperparameters
     best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
     best_model = tuner.get_best_models(num_models=1)[0]
+
+    best_model.save('best_model.keras')
     
     print("Best hyperparameters found:")
     for key, value in best_hps.values.items():
@@ -316,7 +323,7 @@ def main():
         x=train_inputs,
         y=train_label,
         validation_data=(validation_inputs, validation_label),
-        epochs=50,
+        epochs=20,
         callbacks=[
             ROCCallback(
                 training_data=(train_inputs, train_label),
@@ -324,8 +331,36 @@ def main():
                 test_data=(test_inputs, test_label)
             )
         ],
-        batch_size = 16   
+        batch_size = 4
     )
+
+    train_loss = best_model.history.history['loss']
+    val_loss = best_model.history.history['val_loss']
+
+    print(train_loss)
+    print(val_loss)
+
+    # import matplotlib.pyplot as plt
+
+    # # Extract training and validation loss
+    # batch_size = 16
+    # train_loss = [1.119234561920166, 1.0752772092819214, 1.0597939491271973, 1.0496492385864258, 1.0416439771652222, 1.0348870754241943, 1.028945803642273, 1.0235933065414429, 1.018475890159607, 1.0134563446044922, 1.0085142850875854, 1.0035454034805298, 0.9984066486358643, 0.993018388748169, 0.9872414469718933, 0.9816643595695496, 0.9761062860488892, 0.9707697033882141, 0.9654361605644226, 0.9597151875495911]
+    # val_loss = [1.1474469900131226, 1.1343291997909546, 1.1328338384628296, 1.1349830627441406, 1.1380906105041504, 1.141312599182129, 1.1448898315429688, 1.1497677564620972, 1.1550017595291138, 1.1648751497268677, 1.1760830879211426, 1.1881539821624756, 1.200982928276062, 1.2099698781967163, 1.2237837314605713, 1.2353497743606567, 1.2485274076461792, 1.2623205184936523, 1.2786026000976562, 1.295060157775879]
+    # # Plot training and validation loss
+    # plt.figure(figsize=(8, 6))
+    # plt.plot(train_loss, label=f'Training Loss (Batch Size = {batch_size})', color='blue', marker='o')
+    # plt.plot(val_loss, label=f'Validation Loss (Batch Size={batch_size})', color='orange', marker='o')
+    # plt.xlabel('Epochs')
+    # plt.ylabel('Loss')
+    # plt.title('Training and Validation Loss')
+    # plt.legend()
+    # plt.grid(True)
+
+    # # Ensure that the plot renders
+    # plt.show()
+
+    # plt.savefig('loss_plot_b16.png')
+
 
 
 if __name__ == '__main__':
