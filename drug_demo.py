@@ -222,9 +222,8 @@ def main():
     
     
     # Define the hyperparameter tuning process
-    def build_model(): # hp
+    def build_model(hp):
         num_features = train_data.shape[1]
-        # input_layer = Input(shape=(num_features,))
 
         embeddings = []
         inputs = []
@@ -234,8 +233,8 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            # embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
-            embedding_layer = Embedding(input_dim=size + 1, output_dim=16)(input_layer)
+            embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
+            embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
       
 
@@ -244,14 +243,14 @@ def main():
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=8 ,#hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
-            num_experts=4 ,#hp.Int('num_experts', min_value=4, max_value=12, step=4),
+            units=hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
+            num_experts=hp.Int('num_experts', min_value=4, max_value=12, step=4),
             num_tasks=2
         )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
-            tower_units =16 #hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
+            tower_units = hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
@@ -265,55 +264,51 @@ def main():
             output_layers.append(output_layer)
         
         # Compile the model
-        # learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
+        learning_rate = hp.Choice('learning_rate', values=[1e-3, 1e-4, 1e-5])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
-            optimizer=Adam(), #learning_rate=learning_rate),
+            optimizer=Adam(learning_rate=learning_rate),
             metrics={label1: ['precision'], label2: ['precision']}
         )
         return model
-    
-    # # Initialize the tuner
-    # tuner = RandomSearch(
-    #     build_model, 
-    #     objective=[keras_tuner.Objective('HOSP_precision', direction='max'), keras_tuner.Objective('RDMIT_precision', direction='max')],
-    #     max_trials=1,
-    #     directory='my_dir',
-    #     project_name='mmoe_hyperparameter_tuning',
-    #     overwrite=False
-    # )
-    
-    # # Run the hyperparameter search
-    # tuner.search(
-    #     x=train_data,
-    #     y=train_label,
-    #     validation_data=(validation_data, validation_label),
-    #     callbacks=[keras.callbacks.EarlyStopping(monitor="HOSP_precision", mode='max'),keras.callbacks.EarlyStopping(monitor="RDMIT_precision", mode='max')
-    #         # ROCCallback(
-    #         #     training_data=(train_data, train_label),
-    #         #     validation_data=(validation_data, validation_label),
-    #         #     test_data=(test_data, test_label)
-    #         # )
-    #     ],
-
-    # )
-    
-    # # Retrieve the best model and hyperparameters
-    # best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
-    # best_model = tuner.get_best_models(num_models=1)[0]
-    
-    # print("Best hyperparameters found:")
-    # for key, value in best_hps.values.items():
-    #     print(f"{key}: {value}")
-
-    best_model = build_model()
-
-    best_model.summary()
 
     train_inputs = [train_data.iloc[:, i].values for i in range(train_data.shape[1])]
     validation_inputs = [validation_data.iloc[:, i].values for i in range(validation_data.shape[1])]
     test_inputs = [test_data.iloc[:, i].values for i in range(test_data.shape[1])]
+    
+    # Initialize the tuner
+    tuner = RandomSearch(
+        build_model, 
+        objective=[keras_tuner.Objective('HOSP_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')],
+        max_trials=15,
+        directory='my_dir',
+        project_name='mmoe_hyperparameter_tuning' #,
+        # overwrite=True
+    )
+    
+    # Run the hyperparameter search
+    tuner.search(
+        x=train_inputs,
+        y=train_label,
+        validation_data=(validation_inputs, validation_label),
+        callbacks=[keras.callbacks.EarlyStopping(monitor="HOSP_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
+            # ROCCallback(
+            #     training_data=(train_data, train_label),
+            #     validation_data=(validation_data, validation_label),
+            #     test_data=(test_data, test_label)
+            # )
+        ],
+        batch_size = 16
+    )
+    
+    # Retrieve the best model and hyperparameters
+    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+    best_model = tuner.get_best_models(num_models=1)[0]
+    
+    print("Best hyperparameters found:")
+    for key, value in best_hps.values.items():
+        print(f"{key}: {value}")
     
     # Train the best model further
     
@@ -321,14 +316,15 @@ def main():
         x=train_inputs,
         y=train_label,
         validation_data=(validation_inputs, validation_label),
-        epochs=100,
+        epochs=50,
         callbacks=[
             ROCCallback(
                 training_data=(train_inputs, train_label),
                 validation_data=(validation_inputs, validation_label),
                 test_data=(test_inputs, test_label)
             )
-        ]
+        ],
+        batch_size = 16   
     )
 
 
