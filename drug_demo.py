@@ -32,7 +32,7 @@ from mmoe import MMoE
 
 from keras_tuner import RandomSearch
 
-SEED = 1
+SEED = 2
 
 # Fix numpy seed for reproducibility
 np.random.seed(SEED)
@@ -166,13 +166,18 @@ def data_preparation():
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
                         'THRGRDS', 'PHYFLAG']
 
+    numerical_columns = ['NETPAY_x']
+
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
-    transformed_train = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
-    transformed_other = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
 
-    transformed_train = transformed_train[categorical_columns]
-    transformed_other = transformed_other[categorical_columns]
+    transformed_train = transformed_train_main[categorical_columns]
+    transformed_other = transformed_other_main[categorical_columns]
+
+    transformed_train_dense = transformed_train_main[numerical_columns]
+    transformed_other_dense = transformed_other_main[numerical_columns]
 
 
     cat_size_train = []
@@ -180,6 +185,10 @@ def data_preparation():
 
     cat_size_other = []
     transformed_other, cat_size = label_encode_df(transformed_other, cat_size_other)
+
+    transformed_train = pd.concat([transformed_train, transformed_train_dense], axis=1)
+    transformed_other = pd.concat([transformed_other, transformed_other_dense], axis=1)
+
 
     cat_size = np.maximum(cat_size_train, cat_size_other)
 
@@ -212,16 +221,16 @@ def data_preparation():
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    train_data = train_data[categorical_columns]
-    validation_data = validation_data[categorical_columns]
-    test_data = test_data[categorical_columns]
+    train_data = train_data[categorical_columns + numerical_columns]
+    validation_data = validation_data[categorical_columns + numerical_columns]
+    test_data = test_data[categorical_columns + numerical_columns]
 
 
-    return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns
+    return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns, numerical_columns
 
 def main():
     # Load the data
-    cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols = data_preparation()
+    cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols, numerical_columns = data_preparation()
     
     
     # Define the hyperparameter tuning process
@@ -239,6 +248,10 @@ def main():
             embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
+
+        dense_input = Input(shape=(len(numerical_columns),), name="dense_input")
+
+        inputs.append(dense_input)
       
 
         # pooled_output = GlobalAveragePooling1D()(embedding_layer)
@@ -269,13 +282,14 @@ def main():
             output_layers.append(output_layer)
         
         # Compile the model
-        learning_rate = hp.Choice('learning_rate', values=[0.001])
+        learning_rate = hp.Choice('learning_rate', values=[0.001, 0.0001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
             optimizer=Adam(learning_rate=learning_rate),
             metrics={label1: ['precision'], label2: ['precision']}
         )
+
         return model
 
     train_inputs = [train_data.iloc[:, i].values for i in range(train_data.shape[1])]
@@ -286,10 +300,10 @@ def main():
     tuner = RandomSearch(
         build_model, 
         objective=[keras_tuner.Objective('HOSP_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')],
-        max_trials=1,
+        max_trials=20,
         directory='my_dir',
-        project_name='mmoe_hyperparameter_tuning' #, 
-        # overwrite=True
+        project_name='mmoe_hyperparameter_tuning', 
+        overwrite=True
     )
     
     # Run the hyperparameter search
@@ -304,14 +318,14 @@ def main():
             #     test_data=(test_data, test_label)
             # )
         ],
-        batch_size = 8
+        batch_size = 32
     )
     
     # Retrieve the best model and hyperparameters
     best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
     best_model = tuner.get_best_models(num_models=1)[0]
 
-    best_model.save('best_model.keras')
+    
     
     print("Best hyperparameters found:")
     for key, value in best_hps.values.items():
@@ -331,7 +345,7 @@ def main():
                 test_data=(test_inputs, test_label)
             )
         ],
-        batch_size = 4
+        batch_size = 32
     )
 
     train_loss = best_model.history.history['loss']
@@ -339,28 +353,6 @@ def main():
 
     print(train_loss)
     print(val_loss)
-
-    # import matplotlib.pyplot as plt
-
-    # # Extract training and validation loss
-    # batch_size = 16
-    # train_loss = [1.119234561920166, 1.0752772092819214, 1.0597939491271973, 1.0496492385864258, 1.0416439771652222, 1.0348870754241943, 1.028945803642273, 1.0235933065414429, 1.018475890159607, 1.0134563446044922, 1.0085142850875854, 1.0035454034805298, 0.9984066486358643, 0.993018388748169, 0.9872414469718933, 0.9816643595695496, 0.9761062860488892, 0.9707697033882141, 0.9654361605644226, 0.9597151875495911]
-    # val_loss = [1.1474469900131226, 1.1343291997909546, 1.1328338384628296, 1.1349830627441406, 1.1380906105041504, 1.141312599182129, 1.1448898315429688, 1.1497677564620972, 1.1550017595291138, 1.1648751497268677, 1.1760830879211426, 1.1881539821624756, 1.200982928276062, 1.2099698781967163, 1.2237837314605713, 1.2353497743606567, 1.2485274076461792, 1.2623205184936523, 1.2786026000976562, 1.295060157775879]
-    # # Plot training and validation loss
-    # plt.figure(figsize=(8, 6))
-    # plt.plot(train_loss, label=f'Training Loss (Batch Size = {batch_size})', color='blue', marker='o')
-    # plt.plot(val_loss, label=f'Validation Loss (Batch Size={batch_size})', color='orange', marker='o')
-    # plt.xlabel('Epochs')
-    # plt.ylabel('Loss')
-    # plt.title('Training and Validation Loss')
-    # plt.legend()
-    # plt.grid(True)
-
-    # # Ensure that the plot renders
-    # plt.show()
-
-    # plt.savefig('loss_plot_b16.png')
-
 
 
 if __name__ == '__main__':

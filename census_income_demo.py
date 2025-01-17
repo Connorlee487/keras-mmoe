@@ -61,6 +61,11 @@ class ROCCallback(Callback):
         validation_prediction = self.model.predict(self.validation_X)
         test_prediction = self.model.predict(self.test_X)
 
+        print(f"EPOCH {epoch+1}")
+        for task_name in logs:
+            if 'loss' in task_name:
+                print(f"NAME: {task_name} -- LOSS: {logs[task_name]:.4f}")
+
         # Iterate through each task and output their ROC-AUC across different datasets
         for index, output_name in enumerate(self.model.output_names):
             train_roc_auc = roc_auc_score(self.train_Y[index], train_prediction[index])
@@ -83,13 +88,15 @@ class ROCCallback(Callback):
         return
     
 
-def label_encode_df(df):
+def label_encode_df(df, sizes):
     label_encoders = {}
+
     for column in df.columns:
         encoder = LabelEncoder()
         df[column] = encoder.fit_transform(df[column])
         label_encoders[column] = encoder
-    return df
+        sizes.append(len(encoder.classes_))
+    return df, sizes
 
 
 def data_preparation():
@@ -132,15 +139,19 @@ def data_preparation():
     train_raw_labels = train_df[label_columns]
     other_raw_labels = other_df[label_columns]
 
-    transformed_train = pd.get_dummies(train_df.drop(label_columns, axis=1), columns=categorical_columns)
-    transformed_other = pd.get_dummies(other_df.drop(label_columns, axis=1), columns=categorical_columns)
+    # transformed_train = pd.get_dummies(train_df.drop(label_columns, axis=1), columns=categorical_columns)
+    # transformed_other = pd.get_dummies(other_df.drop(label_columns, axis=1), columns=categorical_columns)
     
-    # transformed_train = train_df[categorical_columns]
-    # transformed_other = other_df[categorical_columns]
+    transformed_train = train_df[categorical_columns]
+    transformed_other = other_df[categorical_columns]
+    
+    cat_size_train = []
+    transformed_train = label_encode_df(transformed_train, cat_size_train)
 
-    # transformed_train = label_encode_df(transformed_train)
-    # transformed_other = label_encode_df(transformed_other)
+    cat_size_other= []
+    transformed_other = label_encode_df(transformed_other, cat_size_other)
 
+    cat_size = np.maximum(cat_size_train, cat_size_other)
 
     # Filling the missing column in the other set
     transformed_other['det_hh_fam_stat_ Grandchild <18 ever marr not in subfamily'] = 0
@@ -175,29 +186,38 @@ def data_preparation():
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    return train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
+    return cat_size, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns
 
 
 def main():
     # Load the data
-    train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = data_preparation()
+    cat_size, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns= data_preparation()
     
     # Define the hyperparameter tuning process
     def build_model(hp):
         num_features = train_data.shape[1]
         input_layer = Input(shape=(num_features,))
+
+        embeddings = []
+        inputs = []
+
+        for i, size in enumerate(cat_size): 
+            input_layer = Input(shape=(1,), name=str(i))
+            inputs.append(input_layer)
         
-        # Hyperparameter tuning
-        embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
-        embedding_layer = Embedding(input_dim=500, output_dim=embedding_dim)(input_layer)
-        pooled_output = GlobalAveragePooling1D()(embedding_layer)
+            # Hyperparameter tuning
+            embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
+            embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
+            embeddings.append(Flatten()(embedding_layer))
+
+        concat_layer = Concatenate()(embeddings)
         
         # MMoE layer
         mmoe_layers = MMoE(
             units=hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
             num_experts=hp.Int('num_experts', min_value=4, max_value=12, step=4),
             num_tasks=2
-        )(pooled_output)
+        )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
@@ -216,29 +236,34 @@ def main():
         
         # Compile the model
         learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
-        model = Model(inputs=[input_layer], outputs=output_layers)
+        model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={'income': 'binary_crossentropy', 'marital': 'binary_crossentropy'},
             optimizer=Adam(learning_rate=learning_rate),
-            metrics=[['precision'], ['precision']]
+            metrics={'income' : ['precision'], 'marital' : ['precision']}
         )
         return model
+    
+    train_inputs = [train_data.iloc[:, i].values for i in range(train_data.shape[1])]
+    validation_inputs = [validation_data.iloc[:, i].values for i in range(validation_data.shape[1])]
+    test_inputs = [test_data.iloc[:, i].values for i in range(test_data.shape[1])]
     
     # Initialize the tuner
     tuner = RandomSearch(
         build_model,
-        objective=[[keras_tuner.Objective('income_precision', direction='max'), keras_tuner.Objective('marital_precision', direction='max')]],
-        max_trials=8,
+        objective=[[keras_tuner.Objective('income_loss', direction='min'), keras_tuner.Objective('marital_loss', direction='min')]],
+        max_trials=15,
         directory='my_dir',
-        project_name='mmoe_hyperparameter_tuning'
+        project_name='mmoe_hyperparameter_tuning',
+        overwrite = True
     )
     
     # Run the hyperparameter search
     tuner.search(
-        x=train_data,
+        x=train_inputs,
         y=train_label,
-        validation_data=(validation_data, validation_label),
-        callbacks=[keras.callbacks.EarlyStopping(monitor="income_precision", mode='max'),keras.callbacks.EarlyStopping(monitor="marital_precision", mode='max')],
+        validation_data=(validation_inputs, validation_label),
+        callbacks=[keras.callbacks.EarlyStopping(monitor="income_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="marital_loss", mode='min')],
 
     )
     
@@ -252,15 +277,15 @@ def main():
     
     # Train the best model further
     best_model.fit(
-        x=train_data,
+        x=train_inputs,
         y=train_label,
-        validation_data=(validation_data, validation_label),
+        validation_data=(validation_inputs, validation_label),
         epochs=100,
         callbacks=[
             ROCCallback(
-                training_data=(train_data, train_label),
-                validation_data=(validation_data, validation_label),
-                test_data=(test_data, test_label)
+                training_data=(train_inputs, train_label),
+                validation_data=(validation_inputs, validation_label),
+                test_data=(test_inputs, test_label)
             )
         ]
     )
