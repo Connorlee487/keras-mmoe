@@ -24,6 +24,7 @@ from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Flatte
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
+from tensorflow.keras.metrics import AUC
 from keras_tuner import Hyperband
 from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
 from sklearn.preprocessing import LabelEncoder
@@ -245,7 +246,7 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
+            embedding_dim = 8 #hp.Choice('embedding_dim', values=[8, 16, 32])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
@@ -259,14 +260,14 @@ def main():
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
-            num_experts=hp.Int('num_experts', min_value=4, max_value=12, step=4),
+            units=4, # hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
+            num_experts=2, #hp.Int('num_experts', min_value=4, max_value=12, step=4),
             num_tasks=2
         )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
-            tower_units = hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
+            tower_units = 4 #hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
@@ -282,12 +283,15 @@ def main():
             output_layers.append(output_layer)
         
         # Compile the model
-        learning_rate = hp.Choice('learning_rate', values=[0.001, 0.0001])
+        learning_rate = 0.0001 #hp.Choice('learning_rate', values=[0.001, 0.0001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
             optimizer=Adam(learning_rate=learning_rate),
-            metrics={label1: ['precision'], label2: ['precision']}
+            metrics={
+              label1: ['precision', AUC(name='roc_auc'), AUC(name='pr_auc', curve='PR')],
+              label2: ['precision', AUC(name='roc_auc'), AUC(name='pr_auc', curve='PR')]
+            }
         )
 
         return model
@@ -300,7 +304,7 @@ def main():
     tuner = RandomSearch(
         build_model, 
         objective=[keras_tuner.Objective('HOSP_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')],
-        max_trials=20,
+        max_trials=1,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
         overwrite=True
@@ -337,7 +341,7 @@ def main():
         x=train_inputs,
         y=train_label,
         validation_data=(validation_inputs, validation_label),
-        epochs=20,
+        epochs=80,
         callbacks=[
             ROCCallback(
                 training_data=(train_inputs, train_label),
@@ -351,8 +355,29 @@ def main():
     train_loss = best_model.history.history['loss']
     val_loss = best_model.history.history['val_loss']
 
+    train_pr_auc_HOSP = best_model.history.history['HOSP_pr_auc']
+    val_pr_auc_HOSP = best_model.history.history['val_HOSP_pr_auc']
+
+    train_roc_auc_HOSP = best_model.history.history['HOSP_roc_auc']
+    val_roc_auc_HOSP = best_model.history.history['val_HOSP_roc_auc']
+
+    train_pr_auc_RDMIT = best_model.history.history['RDMIT_pr_auc']
+    val_pr_auc_RDMIT = best_model.history.history['val_RDMIT_pr_auc']
+
+    train_roc_auc_RDMIT = best_model.history.history['RDMIT_roc_auc']
+    val_roc_auc_RDMIT = best_model.history.history['val_RDMIT_roc_auc']
+    
+
     print(train_loss)
     print(val_loss)
+    print(train_pr_auc_HOSP)
+    print(val_pr_auc_HOSP)
+    print(train_roc_auc_HOSP)
+    print(val_roc_auc_HOSP)
+    print(train_pr_auc_RDMIT)
+    print(val_pr_auc_RDMIT)
+    print(train_roc_auc_RDMIT)
+    print(val_roc_auc_RDMIT)
 
 
 if __name__ == '__main__':
