@@ -169,10 +169,10 @@ def data_preparation():
 
     numerical_columns = ['NETPAY_x']
 
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_2.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_2.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_2.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_2.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
@@ -368,16 +368,15 @@ def main():
     val_roc_auc_RDMIT = best_model.history.history['val_RDMIT_roc_auc']
     
 
-    print(train_loss)
-    print(val_loss)
-    print(train_pr_auc_HOSP)
-    print(val_pr_auc_HOSP)
-    print(train_roc_auc_HOSP)
-    print(val_roc_auc_HOSP)
-    print(train_pr_auc_RDMIT)
-    print(val_pr_auc_RDMIT)
-    print(train_roc_auc_RDMIT)
-    print(val_roc_auc_RDMIT)
+    print([train_loss, val_loss])
+    print([train_pr_auc_HOSP,
+    val_pr_auc_HOSP,
+    train_roc_auc_HOSP,
+    val_roc_auc_HOSP,
+    train_pr_auc_RDMIT,
+    val_pr_auc_RDMIT,
+    train_roc_auc_RDMIT,
+    val_roc_auc_RDMIT])
 
 
 if __name__ == '__main__':
