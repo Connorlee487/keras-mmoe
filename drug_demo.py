@@ -86,18 +86,18 @@ class ROCCallback(Callback):
             y_pred_validation = (validation_prediction[index] >= threshold).astype(int)
             y_pred_test = (test_prediction[index] >= threshold).astype(int)
 
-            train_precision = precision_score(self.train_Y[index], y_pred_train, average="weighted")
-            train_recall = recall_score(self.train_Y[index], y_pred_train, average="weighted")
-            train_f1 = f1_score(self.train_Y[index], y_pred_train, average="weighted")    
+            train_precision = precision_score(self.train_Y[index][:, 1], y_pred_train[:, 1]) #, average="weighted")
+            train_recall = recall_score(self.train_Y[index][:, 1], y_pred_train[:, 1]) #, average="weighted")
+            train_f1 = f1_score(self.train_Y[index][:, 1], y_pred_train[:, 1]) #, average="weighted")    
 
-            validation_precision = precision_score(self.validation_Y[index], y_pred_validation, average='weighted')
-            validation_recall = recall_score(self.validation_Y[index], y_pred_validation, average='weighted')
-            validation_f1 = f1_score(self.validation_Y[index], y_pred_validation, average='weighted')
+            validation_precision = precision_score(self.validation_Y[index][:, 1], y_pred_validation[:, 1]) #, average='weighted')
+            validation_recall = recall_score(self.validation_Y[index][:, 1], y_pred_validation[:, 1]) #, average='weighted')
+            validation_f1 = f1_score(self.validation_Y[index][:, 1], y_pred_validation[:, 1]) #, average='weighted')
 
 
-            test_precision = precision_score(self.test_Y[index], y_pred_test, average='weighted')
-            test_recall = recall_score(self.test_Y[index], y_pred_test, average='weighted')
-            test_f1 = f1_score(self.test_Y[index], y_pred_test, average='weighted')
+            test_precision = precision_score(self.test_Y[index][:, 1], y_pred_test[:, 1]) #, average='weighted')
+            test_recall = recall_score(self.test_Y[index][:, 1], y_pred_test[:, 1]) #, average='weighted')
+            test_f1 = f1_score(self.test_Y[index][:, 1], y_pred_test[:, 1]) #, average='weighted')
 
             print(
                'ROC-AUC-{}-Train: {} Precision-{}-Train: {} Recall-{}-Train: {} \nROC-AUC-{}-Validation: {} \nROC-AUC-{}-Test: {} Precision-{}-Test: {} Recall-{}-Test: {} \n'.format(
@@ -112,28 +112,6 @@ class ROCCallback(Callback):
                 output_name, round(test_recall, 4),
                )
             )
-
-
-            # print(
-            #     'LOSS: {} ROC-AUC-{}-Train: {} ROC-AUC-{}-Validation: {} ROC-AUC-{}-Test: {} // Precision-{}-Train: {} Recall-{}-Train: {} F1-{}-Train: {} // Precision-{}-Validation: {} Recall-{}-Validation: {} F1-{}-Validation: {} // Precision-{}-Test: {} Recall-{}-Test: {} F1-{}-Test: {}'.format(
-            #         current_loss, output_name, round(train_roc_auc, 4),
-            #         output_name, round(validation_roc_auc, 4),
-            #         output_name, round(test_roc_auc, 4),
-
-            #         output_name, round(train_precision, 4),
-            #         output_name, round(train_recall, 4),
-            #         output_name, round(train_f1, 4),
-
-            #         output_name, round(validation_precision, 4),
-            #         output_name, round(validation_recall, 4),
-            #         output_name, round(validation_f1, 4),
-                    
-            #         output_name, round(test_precision, 4),
-            #         output_name, round(test_recall, 4),
-            #         output_name, round(test_f1, 4)
-
-            #     )
-            # )
 
         return
 
@@ -159,7 +137,6 @@ def data_preparation():
 
     label_columns = [label1, label2] #HOSP
     
-    # categorical_columns = ['PROCTYP', 'YEAR', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV',  'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PHYFLAG', 'PRODCAT', 'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 'THRGRDS', 'STDPROV', 'NETPAY_x']
     categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
                         'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
@@ -169,6 +146,7 @@ def data_preparation():
 
     numerical_columns = ['NETPAY_x']
 
+    # Following format of original code
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_2.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_2.csv.gz") 
     transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_2.csv.gz") 
@@ -234,10 +212,8 @@ def main():
     cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols, numerical_columns = data_preparation()
     
     
-    # Define the hyperparameter tuning process
+    # Define the hyperparameter tuning process https://keras.io/keras_tuner/getting_started/ 
     def build_model(hp):
-        num_features = train_data.shape[1]
-
         embeddings = []
         inputs = []
 
@@ -246,7 +222,7 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = 8 #hp.Choice('embedding_dim', values=[8, 16, 32])
+            embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
@@ -254,20 +230,18 @@ def main():
 
         inputs.append(dense_input)
       
-
-        # pooled_output = GlobalAveragePooling1D()(embedding_layer)
         concat_layer = Concatenate()(embeddings)
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=4, # hp.Int('mmoe_units', min_value=4, max_value=16, step=4),
-            num_experts=2, #hp.Int('num_experts', min_value=4, max_value=12, step=4),
+            units=hp.Int('mmoe_units', min_value=2, max_value=8, step=2),
+            num_experts=hp.Int('num_experts', min_value=2, max_value=8, step=2),
             num_tasks=2
         )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
-            tower_units = 4 #hp.Int(f'tower_units_task_{index}', min_value=8, max_value=32, step=8)
+            tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=8, step=2)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
@@ -282,8 +256,7 @@ def main():
                 kernel_regularizer=l2(0.01))(tower_layer)
             output_layers.append(output_layer)
         
-        # Compile the model
-        learning_rate = 0.0001 #hp.Choice('learning_rate', values=[0.001, 0.0001])
+        learning_rate = hp.Choice('learning_rate', values=[0.001, 0.0001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
@@ -300,27 +273,23 @@ def main():
     validation_inputs = [validation_data.iloc[:, i].values for i in range(validation_data.shape[1])]
     test_inputs = [test_data.iloc[:, i].values for i in range(test_data.shape[1])]
     
-    # Initialize the tuner
+    # Used https://keras.io/keras_tuner/api/tuners/random/ 
     tuner = RandomSearch(
         build_model, 
-        objective=[keras_tuner.Objective('HOSP_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')],
+        objective=[keras_tuner.Objective('HOSP_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')], # Minimize loss for both
         max_trials=1,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
-        overwrite=True
+        overwrite=False
     )
     
-    # Run the hyperparameter search
+    # Run the hyperparameter search 
     tuner.search(
         x=train_inputs,
         y=train_label,
         validation_data=(validation_inputs, validation_label),
+        # https://keras.io/api/callbacks/early_stopping/ 
         callbacks=[keras.callbacks.EarlyStopping(monitor="HOSP_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
-            # ROCCallback(
-            #     training_data=(train_data, train_label),
-            #     validation_data=(validation_data, validation_label),
-            #     test_data=(test_data, test_label)
-            # )
         ],
         batch_size = 32
     )
@@ -329,13 +298,9 @@ def main():
     best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
     best_model = tuner.get_best_models(num_models=1)[0]
 
-    
-    
     print("Best hyperparameters found:")
     for key, value in best_hps.values.items():
         print(f"{key}: {value}")
-    
-    # Train the best model further
     
     best_model.fit(
         x=train_inputs,
@@ -368,15 +333,15 @@ def main():
     val_roc_auc_RDMIT = best_model.history.history['val_RDMIT_roc_auc']
     
 
-    print([train_loss, val_loss])
-    print([train_pr_auc_HOSP,
-    val_pr_auc_HOSP,
-    train_roc_auc_HOSP,
-    val_roc_auc_HOSP,
-    train_pr_auc_RDMIT,
-    val_pr_auc_RDMIT,
-    train_roc_auc_RDMIT,
-    val_roc_auc_RDMIT])
+    # print([train_loss, val_loss])
+    # print([train_pr_auc_HOSP,
+    # val_pr_auc_HOSP,
+    # train_roc_auc_HOSP,
+    # val_roc_auc_HOSP,
+    # train_pr_auc_RDMIT,
+    # val_pr_auc_RDMIT,
+    # train_roc_auc_RDMIT,
+    # val_roc_auc_RDMIT])
 
 
 if __name__ == '__main__':
