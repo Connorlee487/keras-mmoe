@@ -314,7 +314,8 @@ def main():
                 test_data=(test_inputs, test_label)
             )
         ],
-        batch_size = 32
+        batch_size=32,
+        shuffle=True
     )
 
     train_loss = best_model.history.history['loss']
