@@ -132,7 +132,7 @@ def label_encode_df(df, sizes):
     return df, sizes
 
 def data_preparation():
-    label1 = 'HOSP'
+    label1 = 'NETPAY_binary'
     label2 = 'RDMIT'
 
     label_columns = [label1, label2] #HOSP
@@ -146,10 +146,10 @@ def data_preparation():
 
     # numerical_columns = ['NETPAY_x']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_price_rdmit.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_price_rdmit.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_price_rdmit.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_price_rdmit.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_price_rdmit_2.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_price_rdmit_2.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_price_rdmit_2.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_price_rdmit_2.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
@@ -221,7 +221,7 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = hp.Choice('embedding_dim', values=[8, 16, 32])
+            embedding_dim = hp.Choice('embedding_dim', values=[8, 16])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
@@ -276,7 +276,7 @@ def main():
     tuner = RandomSearch(
         build_model, 
         objective=[keras_tuner.Objective('HOSP_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')], # Minimize loss for both
-        max_trials=1,
+        max_trials=10,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
         overwrite=False
@@ -290,7 +290,7 @@ def main():
         # https://keras.io/api/callbacks/early_stopping/ 
         callbacks=[keras.callbacks.EarlyStopping(monitor="HOSP_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
         ],
-        batch_size = 32
+        batch_size = 64
     )
     
     # Retrieve the best model and hyperparameters
@@ -305,7 +305,7 @@ def main():
         x=train_inputs,
         y=train_label,
         validation_data=(validation_inputs, validation_label),
-        epochs=80,
+        epochs=50,
         callbacks=[
             ROCCallback(
                 training_data=(train_inputs, train_label),
@@ -313,7 +313,7 @@ def main():
                 test_data=(test_inputs, test_label)
             )
         ],
-        batch_size=32,
+        batch_size=64,
         shuffle=True
     )
 
