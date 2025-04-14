@@ -133,7 +133,7 @@ def label_encode_df(df, sizes):
 
 def data_preparation():
     label1 = 'NETPAY_binary'
-    label2 = 'RDMIT'
+    label2 = 'HOSP'
 
     label_columns = [label1, label2] #HOSP
     
@@ -142,14 +142,14 @@ def data_preparation():
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
                         'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
-                        'THRGRDS', 'PHYFLAG', 'HOSP']
+                        'THRGRDS', 'PHYFLAG', 'RDMIT']
 
     # numerical_columns = ['NETPAY_x']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_price_rdmit_2.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_price_rdmit_2.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_price_rdmit_2.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_price_rdmit_2.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_price_hosp.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_price_hosp.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_price_hosp.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_price_hosp.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
@@ -275,7 +275,7 @@ def main():
     # Used https://keras.io/keras_tuner/api/tuners/random/ 
     tuner = RandomSearch(
         build_model, 
-        objective=[keras_tuner.Objective('NETPAY_binary_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')], # Minimize loss for both
+        objective=[keras_tuner.Objective('NETPAY_binary_loss', direction='min'), keras_tuner.Objective('HOSP_loss', direction='min')], # Minimize loss for both
         max_trials=10,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
@@ -288,7 +288,7 @@ def main():
         y=train_label,
         validation_data=(validation_inputs, validation_label),
         # https://keras.io/api/callbacks/early_stopping/ 
-        callbacks=[keras.callbacks.EarlyStopping(monitor="NETPAY_binary_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
+        callbacks=[keras.callbacks.EarlyStopping(monitor="NETPAY_binary_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="HOSP_loss", mode='min')
         ],
         batch_size = 64
     )
@@ -326,11 +326,11 @@ def main():
     train_roc_auc_HOSP = best_model.history.history['NETPAY_binary_roc_auc']
     val_roc_auc_HOSP = best_model.history.history['val_NETPAY_binary_roc_auc']
 
-    train_pr_auc_RDMIT = best_model.history.history['RDMIT_pr_auc']
-    val_pr_auc_RDMIT = best_model.history.history['val_RDMIT_pr_auc']
+    train_pr_auc_RDMIT = best_model.history.history['HOSP_pr_auc']
+    val_pr_auc_RDMIT = best_model.history.history['val_HOSP_pr_auc']
 
-    train_roc_auc_RDMIT = best_model.history.history['RDMIT_roc_auc']
-    val_roc_auc_RDMIT = best_model.history.history['val_RDMIT_roc_auc']
+    train_roc_auc_RDMIT = best_model.history.history['HOSP_roc_auc']
+    val_roc_auc_RDMIT = best_model.history.history['val_HOSP_roc_auc']
     
 
     print([train_loss, val_loss])
