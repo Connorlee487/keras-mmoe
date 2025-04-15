@@ -221,7 +221,7 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = hp.Choice('embedding_dim', values=[8, 16])
+            embedding_dim = hp.Choice('embedding_dim', values=[8])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
@@ -233,14 +233,14 @@ def main():
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=hp.Int('mmoe_units', min_value=2, max_value=8, step=2),
-            num_experts=hp.Int('num_experts', min_value=2, max_value=8, step=2),
+            units=hp.Int('mmoe_units', min_value=8, max_value=8, step=2),
+            num_experts=hp.Int('num_experts', min_value=4, max_value=4, step=2),
             num_tasks=2
         )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
-            tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=8, step=2)
+            tower_units = hp.Int(f'tower_units_task_{index}', min_value=4, max_value=4, step=2)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
@@ -255,7 +255,7 @@ def main():
                 kernel_regularizer=l2(0.01))(tower_layer)
             output_layers.append(output_layer)
         
-        learning_rate = hp.Choice('learning_rate', values=[0.001, 0.0001])
+        learning_rate = hp.Choice('learning_rate', values=[0.0001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
@@ -276,10 +276,10 @@ def main():
     tuner = RandomSearch(
         build_model, 
         objective=[keras_tuner.Objective('NETPAY_binary_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')], # Minimize loss for both
-        max_trials=10,
+        max_trials=1,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
-        overwrite=False
+        overwrite=True
     )
     
     # Run the hyperparameter search 
@@ -290,7 +290,7 @@ def main():
         # https://keras.io/api/callbacks/early_stopping/ 
         callbacks=[keras.callbacks.EarlyStopping(monitor="NETPAY_binary_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
         ],
-        batch_size = 64
+        batch_size = 32
     )
     
     # Retrieve the best model and hyperparameters
@@ -313,7 +313,7 @@ def main():
                 test_data=(test_inputs, test_label)
             )
         ],
-        batch_size=64,
+        batch_size=32,
         shuffle=True
     )
 
