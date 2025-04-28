@@ -132,7 +132,7 @@ def label_encode_df(df, sizes):
     return df, sizes
 
 def data_preparation():
-    label1 = 'NETPAY_binary'
+    label1 = 'paid_more'
     label2 = 'RDMIT'
 
     label_columns = [label1, label2] #HOSP
@@ -144,18 +144,18 @@ def data_preparation():
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
                         'THRGRDS', 'PHYFLAG', 'HOSP']
 
-    # numerical_columns = ['NETPAY_x']
+    numerical_columns = ['PAY_PER_UNIT']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_price_rdmit_2.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_price_rdmit_2.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_price_rdmit_2.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_price_rdmit_2.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_rdmit.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_rdmit.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_rdmit.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_rdmit.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
 
-    # transformed_train_dense = transformed_train_main[numerical_columns]
-    # transformed_other_dense = transformed_other_main[numerical_columns]
+    transformed_train_dense = transformed_train_main[numerical_columns]
+    transformed_other_dense = transformed_other_main[numerical_columns]
 
 
     cat_size_train = []
@@ -164,8 +164,8 @@ def data_preparation():
     cat_size_other = []
     transformed_other, cat_size = label_encode_df(transformed_other, cat_size_other)
 
-    # transformed_train = pd.concat([transformed_train, transformed_train_dense], axis=1)
-    # transformed_other = pd.concat([transformed_other, transformed_other_dense], axis=1)
+    transformed_train = pd.concat([transformed_train, transformed_train_dense], axis=1)
+    transformed_other = pd.concat([transformed_other, transformed_other_dense], axis=1)
 
 
     cat_size = np.maximum(cat_size_train, cat_size_other)
@@ -199,16 +199,16 @@ def data_preparation():
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    train_data = train_data[categorical_columns] # + numerical_columns]
-    validation_data = validation_data[categorical_columns] # + numerical_columns]
-    test_data = test_data[categorical_columns] # + numerical_columns]
+    train_data = train_data[categorical_columns + numerical_columns]
+    validation_data = validation_data[categorical_columns + numerical_columns]
+    test_data = test_data[categorical_columns + numerical_columns]
 
 
-    return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns #, numerical_columns
+    return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns, numerical_columns
 
 def main():
     # Load the data
-    cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols = data_preparation()
+    cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols, numerical_columns = data_preparation()
     
     
     # Define the hyperparameter tuning process https://keras.io/keras_tuner/getting_started/ 
@@ -225,9 +225,9 @@ def main():
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
-        # dense_input = Input(shape=(len(numerical_columns),), name="dense_input")
+        dense_input = Input(shape=(len(numerical_columns),), name="dense_input")
 
-        # inputs.append(dense_input)
+        inputs.append(dense_input)
       
         concat_layer = Concatenate()(embeddings)
         
@@ -275,7 +275,7 @@ def main():
     # Used https://keras.io/keras_tuner/api/tuners/random/ 
     tuner = RandomSearch(
         build_model, 
-        objective=[keras_tuner.Objective('NETPAY_binary_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')], # Minimize loss for both
+        objective=[keras_tuner.Objective('paid_more_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')], # Minimize loss for both
         max_trials=1,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
@@ -288,7 +288,7 @@ def main():
         y=train_label,
         validation_data=(validation_inputs, validation_label),
         # https://keras.io/api/callbacks/early_stopping/ 
-        callbacks=[keras.callbacks.EarlyStopping(monitor="NETPAY_binary_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
+        callbacks=[keras.callbacks.EarlyStopping(monitor="paid_more_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
         ],
         batch_size = 32
     )
@@ -320,11 +320,11 @@ def main():
     train_loss = best_model.history.history['loss']
     val_loss = best_model.history.history['val_loss']
 
-    train_pr_auc_HOSP = best_model.history.history['NETPAY_binary_pr_auc']
-    val_pr_auc_HOSP = best_model.history.history['val_NETPAY_binary_pr_auc']
+    train_pr_auc_HOSP = best_model.history.history['paid_more_pr_auc']
+    val_pr_auc_HOSP = best_model.history.history['val_paid_more_pr_auc']
 
-    train_roc_auc_HOSP = best_model.history.history['NETPAY_binary_roc_auc']
-    val_roc_auc_HOSP = best_model.history.history['val_NETPAY_binary_roc_auc']
+    train_roc_auc_HOSP = best_model.history.history['paid_more_roc_auc']
+    val_roc_auc_HOSP = best_model.history.history['val_paid_more_roc_auc']
 
     train_pr_auc_RDMIT = best_model.history.history['RDMIT_pr_auc']
     val_pr_auc_RDMIT = best_model.history.history['val_RDMIT_pr_auc']
