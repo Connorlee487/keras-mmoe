@@ -132,7 +132,7 @@ def label_encode_df(df, sizes):
     return df, sizes
 
 def data_preparation():
-    label1 = 'NETPAY_binary'
+    label1 = 'paid_more'
     label2 = 'HOSP'
 
     label_columns = [label1, label2] #HOSP
@@ -146,10 +146,10 @@ def data_preparation():
 
     # numerical_columns = ['NETPAY_x']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_price_hosp.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_price_hosp.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_price_hosp.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_price_hosp.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_hosp.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_hosp.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_hosp.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_hosp.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
@@ -221,7 +221,7 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = hp.Choice('embedding_dim', values=[8, 16])
+            embedding_dim = hp.Choice('embedding_dim', values=[4])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
@@ -233,14 +233,14 @@ def main():
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=hp.Int('mmoe_units', min_value=2, max_value=8, step=2),
-            num_experts=hp.Int('num_experts', min_value=2, max_value=8, step=2),
+            units=hp.Int('mmoe_units', min_value=4, max_value=4, step=2),
+            num_experts=hp.Int('num_experts', min_value=4, max_value=4, step=2),
             num_tasks=2
         )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
-            tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=8, step=2)
+            tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=2, step=2)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
@@ -275,7 +275,7 @@ def main():
     # Used https://keras.io/keras_tuner/api/tuners/random/ 
     tuner = RandomSearch(
         build_model, 
-        objective=[keras_tuner.Objective('NETPAY_binary_loss', direction='min'), keras_tuner.Objective('HOSP_loss', direction='min')], # Minimize loss for both
+        objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), keras_tuner.Objective('val_HOSP_loss', direction='min')], # Minimize loss for both
         max_trials=10,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
@@ -288,7 +288,7 @@ def main():
         y=train_label,
         validation_data=(validation_inputs, validation_label),
         # https://keras.io/api/callbacks/early_stopping/ 
-        callbacks=[keras.callbacks.EarlyStopping(monitor="NETPAY_binary_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="HOSP_loss", mode='min')
+        callbacks=[keras.callbacks.EarlyStopping(monitor="val_paid_more_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="val_HOSP_loss", mode='min')
         ],
         batch_size = 64
     )
@@ -320,11 +320,11 @@ def main():
     train_loss = best_model.history.history['loss']
     val_loss = best_model.history.history['val_loss']
 
-    train_pr_auc_HOSP = best_model.history.history['NETPAY_binary_pr_auc']
-    val_pr_auc_HOSP = best_model.history.history['val_NETPAY_binary_pr_auc']
+    train_pr_auc_HOSP = best_model.history.history['paid_more_pr_auc']
+    val_pr_auc_HOSP = best_model.history.history['val_paid_more_pr_auc']
 
-    train_roc_auc_HOSP = best_model.history.history['NETPAY_binary_roc_auc']
-    val_roc_auc_HOSP = best_model.history.history['val_NETPAY_binary_roc_auc']
+    train_roc_auc_HOSP = best_model.history.history['paid_more_roc_auc']
+    val_roc_auc_HOSP = best_model.history.history['val_paid_more_roc_auc']
 
     train_pr_auc_RDMIT = best_model.history.history['HOSP_pr_auc']
     val_pr_auc_RDMIT = best_model.history.history['val_HOSP_pr_auc']
