@@ -135,7 +135,7 @@ def data_preparation():
     label1 = 'paid_more'
     label2 = 'HOSP'
 
-    label_columns = [label1, label2] #HOSP
+    label_columns = [label1, label2] #H`OSP
     
     categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
                         'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
@@ -221,7 +221,7 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = hp.Choice('embedding_dim', values=[4])
+            embedding_dim = hp.Choice('embedding_dim', values=[8])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
@@ -255,7 +255,7 @@ def main():
                 kernel_regularizer=l2(0.01))(tower_layer)
             output_layers.append(output_layer)
         
-        learning_rate = hp.Choice('learning_rate', values=[0.001, 0.0001])
+        learning_rate = hp.Choice('learning_rate', values=[0.00001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
@@ -276,10 +276,10 @@ def main():
     tuner = RandomSearch(
         build_model, 
         objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), keras_tuner.Objective('val_HOSP_loss', direction='min')], # Minimize loss for both
-        max_trials=10,
+        max_trials=1,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
-        overwrite=False
+        overwrite=True
     )
     
     # Run the hyperparameter search 
@@ -290,7 +290,7 @@ def main():
         # https://keras.io/api/callbacks/early_stopping/ 
         callbacks=[keras.callbacks.EarlyStopping(monitor="val_paid_more_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="val_HOSP_loss", mode='min')
         ],
-        batch_size = 64
+        batch_size = 32
     )
     
     # Retrieve the best model and hyperparameters
@@ -313,7 +313,7 @@ def main():
                 test_data=(test_inputs, test_label)
             )
         ],
-        batch_size=64,
+        batch_size=32,
         shuffle=True
     )
 
