@@ -144,7 +144,7 @@ def data_preparation():
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
                         'THRGRDS', 'PHYFLAG', 'HOSP']
 
-    numerical_columns = ['PAY_PER_UNIT']
+    # numerical_columns = ['PAY_PER_UNIT']
     # Following format of original code
     train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_rdmit_2.csv.gz")
     other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_rdmit_2.csv.gz") 
@@ -154,8 +154,8 @@ def data_preparation():
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
 
-    transformed_train_dense = transformed_train_main[numerical_columns]
-    transformed_other_dense = transformed_other_main[numerical_columns]
+    # transformed_train_dense = transformed_train_main[numerical_columns]
+    # transformed_other_dense = transformed_other_main[numerical_columns]
 
 
     cat_size_train = []
@@ -164,8 +164,8 @@ def data_preparation():
     cat_size_other = []
     transformed_other, cat_size = label_encode_df(transformed_other, cat_size_other)
 
-    transformed_train = pd.concat([transformed_train, transformed_train_dense], axis=1)
-    transformed_other = pd.concat([transformed_other, transformed_other_dense], axis=1)
+    # transformed_train = pd.concat([transformed_train, transformed_train_dense], axis=1)
+    # transformed_other = pd.concat([transformed_other, transformed_other_dense], axis=1)
 
 
     cat_size = np.maximum(cat_size_train, cat_size_other)
@@ -199,16 +199,16 @@ def data_preparation():
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    train_data = train_data[categorical_columns + numerical_columns]
-    validation_data = validation_data[categorical_columns + numerical_columns]
-    test_data = test_data[categorical_columns + numerical_columns]
+    train_data = train_data[categorical_columns]# + numerical_columns]
+    validation_data = validation_data[categorical_columns]# + numerical_columns]
+    test_data = test_data[categorical_columns]# + numerical_columns]
 
 
-    return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns, numerical_columns
+    return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns #, numerical_columns
 
 def main():
     # Load the data
-    cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols, numerical_columns = data_preparation()
+    cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, cat_cols = data_preparation()
     
     
     # Define the hyperparameter tuning process https://keras.io/keras_tuner/getting_started/ 
@@ -221,20 +221,20 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = hp.Choice('embedding_dim', values=[8])
+            embedding_dim = hp.Choice('embedding_dim', values=[4])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
-        dense_input = Input(shape=(len(numerical_columns),), name="dense_input")
+        # dense_input = Input(shape=(len(numerical_columns),), name="dense_input")
 
-        inputs.append(dense_input)
+        # inputs.append(dense_input)
       
         concat_layer = Concatenate()(embeddings)
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=hp.Int('mmoe_units', min_value=2, max_value=2, step=2),
-            num_experts=hp.Int('num_experts', min_value=2, max_value=2, step=2),
+            units=hp.Int('mmoe_units', min_value=4, max_value=4, step=2),
+            num_experts=hp.Int('num_experts', min_value=4, max_value=4, step=2),
             num_tasks=2
         )(concat_layer)
         
@@ -255,7 +255,7 @@ def main():
                 kernel_regularizer=l2(0.01))(tower_layer)
             output_layers.append(output_layer)
         
-        learning_rate = hp.Choice('learning_rate', values=[0.001])
+        learning_rate = hp.Choice('learning_rate', values=[0.00001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
@@ -275,7 +275,7 @@ def main():
     # Used https://keras.io/keras_tuner/api/tuners/random/ 
     tuner = RandomSearch(
         build_model, 
-        objective=[keras_tuner.Objective('paid_more_loss', direction='min'), keras_tuner.Objective('RDMIT_loss', direction='min')], # Minimize loss for both
+        objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), keras_tuner.Objective('val_RDMIT_loss', direction='min')], # Minimize loss for both
         max_trials=1,
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
@@ -288,9 +288,9 @@ def main():
         y=train_label,
         validation_data=(validation_inputs, validation_label),
         # https://keras.io/api/callbacks/early_stopping/ 
-        callbacks=[keras.callbacks.EarlyStopping(monitor="paid_more_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="RDMIT_loss", mode='min')
+        callbacks=[keras.callbacks.EarlyStopping(monitor="val_paid_more_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="val_RDMIT_loss", mode='min')
         ],
-        batch_size = 32
+        batch_size = 64
     )
     
     # Retrieve the best model and hyperparameters
@@ -313,7 +313,7 @@ def main():
                 test_data=(test_inputs, test_label)
             )
         ],
-        batch_size=32,
+        batch_size=64,
         shuffle=True
     )
 
