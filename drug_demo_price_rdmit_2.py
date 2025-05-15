@@ -151,10 +151,10 @@ def data_preparation():
 
     # numerical_columns = ['PAY_PER_UNIT']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_rdmit_2.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_rdmit_2.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_rdmit_2.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_rdmit_2.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_rdmit_3.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_rdmit_3.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_rdmit_3.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_rdmit_3.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
@@ -250,7 +250,7 @@ def main():
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
             # Add dropout after MMoE layer for each task
-            task_dropout_rate = hp.Float(f'task_{index}_dropout_rate', min_value=0.1, max_value=0.5, step=0.1)
+            task_dropout_rate = hp.Float(f'task_{index}_dropout_rate', min_value=0.3, max_value=0.5, step=0.1)
             task_layer = Dropout(task_dropout_rate)(task_layer)
             
             tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=8, step=2)
@@ -261,7 +261,7 @@ def main():
                 kernel_regularizer=l2(0.01))(task_layer)
             
             # Add dropout after tower layer for each task
-            tower_dropout_rate = hp.Float(f'tower_{index}_dropout_rate', min_value=0.1, max_value=0.5, step=0.1)
+            tower_dropout_rate = hp.Float(f'tower_{index}_dropout_rate', min_value=0.3, max_value=0.5, step=0.1)
             tower_layer = Dropout(tower_dropout_rate)(tower_layer)
             
             output_layer = Dense(
@@ -294,7 +294,7 @@ def main():
         build_model, 
         objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), 
                   keras_tuner.Objective('val_RDMIT_loss', direction='min')], # Minimize loss for both
-        max_trials=5,  # Increased the number of trials for better hyperparameter exploration
+        max_trials=2,  # Increased the number of trials for better hyperparameter exploration
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
         overwrite=True
@@ -348,59 +348,6 @@ def main():
         shuffle=True
     )
 
-    # Plot training & validation loss
-    epochs = range(1, len(history.history['loss']) + 1)
-    
-    plt.figure(figsize=(12, 10))
-    
-    # Plot overall loss
-    plt.subplot(3, 2, 1)
-    plt.plot(epochs, history.history['loss'], 'bo-', label='Training loss')
-    plt.plot(epochs, history.history['val_loss'], 'ro-', label='Validation loss')
-    plt.title('Training and validation loss')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    
-    # Plot paid_more metrics
-    plt.subplot(3, 2, 3)
-    plt.plot(epochs, history.history['paid_more_roc_auc'], 'go-', label='Training ROC-AUC')
-    plt.plot(epochs, history.history['val_paid_more_roc_auc'], 'mo-', label='Validation ROC-AUC')
-    plt.title('paid_more ROC-AUC')
-    plt.xlabel('Epochs')
-    plt.ylabel('ROC-AUC')
-    plt.legend()
-    
-    plt.subplot(3, 2, 4)
-    plt.plot(epochs, history.history['paid_more_pr_auc'], 'go-', label='Training PR-AUC')
-    plt.plot(epochs, history.history['val_paid_more_pr_auc'], 'mo-', label='Validation PR-AUC')
-    plt.title('paid_more PR-AUC')
-    plt.xlabel('Epochs')
-    plt.ylabel('PR-AUC')
-    plt.legend()
-    
-    # Plot RDMIT metrics
-    plt.subplot(3, 2, 5)
-    plt.plot(epochs, history.history['RDMIT_roc_auc'], 'co-', label='Training ROC-AUC')
-    plt.plot(epochs, history.history['val_RDMIT_roc_auc'], 'yo-', label='Validation ROC-AUC')
-    plt.title('RDMIT ROC-AUC')
-    plt.xlabel('Epochs')
-    plt.ylabel('ROC-AUC')
-    plt.legend()
-    
-    plt.subplot(3, 2, 6)
-    plt.plot(epochs, history.history['RDMIT_pr_auc'], 'co-', label='Training PR-AUC')
-    plt.plot(epochs, history.history['val_RDMIT_pr_auc'], 'yo-', label='Validation PR-AUC')
-    plt.title('RDMIT PR-AUC')
-    plt.xlabel('Epochs')
-    plt.ylabel('PR-AUC')
-    plt.legend()
-    
-    plt.tight_layout()
-    plt.savefig('mmoe_training_metrics.png')
-    plt.show()
-    
-    # Print final evaluation metrics
     print("Final evaluation metrics:")
     train_loss = history.history['loss']
     val_loss = history.history['val_loss']
@@ -416,12 +363,24 @@ def main():
 
     train_roc_auc_RDMIT = history.history['RDMIT_roc_auc']
     val_roc_auc_RDMIT = history.history['val_RDMIT_roc_auc']
+
     
     print(f"Final train loss: {train_loss[-1]:.4f}, val loss: {val_loss[-1]:.4f}")
     print(f"paid_more - Final train ROC-AUC: {train_roc_auc_HOSP[-1]:.4f}, val ROC-AUC: {val_roc_auc_HOSP[-1]:.4f}")
     print(f"paid_more - Final train PR-AUC: {train_pr_auc_HOSP[-1]:.4f}, val PR-AUC: {val_pr_auc_HOSP[-1]:.4f}")
     print(f"RDMIT - Final train ROC-AUC: {train_roc_auc_RDMIT[-1]:.4f}, val ROC-AUC: {val_roc_auc_RDMIT[-1]:.4f}")
     print(f"RDMIT - Final train PR-AUC: {train_pr_auc_RDMIT[-1]:.4f}, val PR-AUC: {val_pr_auc_RDMIT[-1]:.4f}")
+
+
+    print([train_loss, val_loss])
+    print([train_pr_auc_HOSP,
+    val_pr_auc_HOSP,
+    train_roc_auc_HOSP,
+    val_roc_auc_HOSP,
+    train_pr_auc_RDMIT,
+    val_pr_auc_RDMIT,
+    train_roc_auc_RDMIT,
+    val_roc_auc_RDMIT])
 
 
 if __name__ == '__main__':
