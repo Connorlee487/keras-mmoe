@@ -20,7 +20,7 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import VarianceScaling
-from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Flatten, GlobalAveragePooling1D
+from tensorflow.keras.layers import Input, Dense, Embedding, Concatenate, Flatten, GlobalAveragePooling1D, Dropout
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import Callback
@@ -94,6 +94,7 @@ class ROCCallback(Callback):
             validation_recall = recall_score(self.validation_Y[index][:, 1], y_pred_validation[:, 1]) #, average='weighted')
             validation_f1 = f1_score(self.validation_Y[index][:, 1], y_pred_validation[:, 1]) #, average='weighted')
 
+
             test_precision = precision_score(self.test_Y[index][:, 1], y_pred_test[:, 1]) #, average='weighted')
             test_recall = recall_score(self.test_Y[index][:, 1], y_pred_test[:, 1]) #, average='weighted')
             test_f1 = f1_score(self.test_Y[index][:, 1], y_pred_test[:, 1]) #, average='weighted')
@@ -111,6 +112,11 @@ class ROCCallback(Callback):
                 output_name, round(test_recall, 4),
                )
             )
+            print(f"Task {output_name} predictions:")
+            print(f"Positive predictions count: {np.sum(y_pred_train[:, 1])}")
+            print(f"Actual positives count: {np.sum(self.train_Y[index][:, 1])}")
+            print(f"Prediction distribution: {np.mean(train_prediction[index][:, 1]):.4f}")
+            print(f"Max prediction probability: {np.max(train_prediction[index][:, 1]):.4f}")
 
         return
 
@@ -132,23 +138,23 @@ def label_encode_df(df, sizes):
 
 def data_preparation():
     label1 = 'paid_more'
-    label2 = 'HOSP'
+    label2 = 'RDMIT'
 
-    label_columns = [label1, label2] #H`OSP
+    label_columns = [label1, label2] #HOSP
     
     categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
                         'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
                         'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
-                        'THRGRDS', 'PHYFLAG', 'RDMIT']
+                        'THRGRDS', 'PHYFLAG', 'HOSP']
 
-    # numerical_columns = ['NETPAY_x']
+    # numerical_columns = ['PAY_PER_UNIT']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_hosp.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_hosp.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_hosp.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_hosp.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_rdmit_2.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_rdmit_2.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_rdmit_2.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_rdmit_2.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
@@ -198,9 +204,9 @@ def data_preparation():
     train_data = transformed_train
     train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
 
-    train_data = train_data[categorical_columns] # + numerical_columns]
-    validation_data = validation_data[categorical_columns] # + numerical_columns]
-    test_data = test_data[categorical_columns] # + numerical_columns]
+    train_data = train_data[categorical_columns]# + numerical_columns]
+    validation_data = validation_data[categorical_columns]# + numerical_columns]
+    test_data = test_data[categorical_columns]# + numerical_columns]
 
 
     return cat_size, label1, label2, train_data, train_label, validation_data, validation_label, test_data, test_label, output_info, categorical_columns #, numerical_columns
@@ -220,7 +226,7 @@ def main():
             inputs.append(input_layer) 
         
             # Hyperparameter tuning
-            embedding_dim = hp.Choice('embedding_dim', values=[8])
+            embedding_dim = hp.Choice('embedding_dim', values=[4])
             embedding_layer = Embedding(input_dim=size + 1, output_dim=embedding_dim)(input_layer)
             embeddings.append(Flatten()(embedding_layer))
 
@@ -230,21 +236,33 @@ def main():
       
         concat_layer = Concatenate()(embeddings)
         
+        # Add dropout layer after concatenation (before MMoE)
+        input_dropout_rate = hp.Float('input_dropout_rate', min_value=0.1, max_value=0.5, step=0.1)
+        concat_layer = Dropout(input_dropout_rate)(concat_layer)
+        
         # MMoE layer
         mmoe_layers = MMoE(
-            units=hp.Int('mmoe_units', min_value=4, max_value=4, step=2),
-            num_experts=hp.Int('num_experts', min_value=4, max_value=4, step=2),
+            units=hp.Int('mmoe_units', min_value=4, max_value=8, step=2),
+            num_experts=hp.Int('num_experts', min_value=4, max_value=8, step=2),
             num_tasks=2
         )(concat_layer)
         
         output_layers = []
         for index, task_layer in enumerate(mmoe_layers):
-            tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=2, step=2)
+            # Add dropout after MMoE layer for each task
+            task_dropout_rate = hp.Float(f'task_{index}_dropout_rate', min_value=0.1, max_value=0.5, step=0.1)
+            task_layer = Dropout(task_dropout_rate)(task_layer)
+            
+            tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=8, step=2)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
                 kernel_initializer=VarianceScaling(),
                 kernel_regularizer=l2(0.01))(task_layer)
+            
+            # Add dropout after tower layer for each task
+            tower_dropout_rate = hp.Float(f'tower_{index}_dropout_rate', min_value=0.1, max_value=0.5, step=0.1)
+            tower_layer = Dropout(tower_dropout_rate)(tower_layer)
             
             output_layer = Dense(
                 units=output_info[index][0],
@@ -254,7 +272,7 @@ def main():
                 kernel_regularizer=l2(0.01))(tower_layer)
             output_layers.append(output_layer)
         
-        learning_rate = hp.Choice('learning_rate', values=[0.00001])
+        learning_rate = hp.Choice('learning_rate', values=[0.00001, 0.0001, 0.001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
@@ -274,8 +292,9 @@ def main():
     # Used https://keras.io/keras_tuner/api/tuners/random/ 
     tuner = RandomSearch(
         build_model, 
-        objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), keras_tuner.Objective('val_HOSP_loss', direction='min')], # Minimize loss for both
-        max_trials=1,
+        objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), 
+                  keras_tuner.Objective('val_RDMIT_loss', direction='min')], # Minimize loss for both
+        max_trials=5,  # Increased the number of trials for better hyperparameter exploration
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
         overwrite=True
@@ -287,9 +306,15 @@ def main():
         y=train_label,
         validation_data=(validation_inputs, validation_label),
         # https://keras.io/api/callbacks/early_stopping/ 
-        callbacks=[keras.callbacks.EarlyStopping(monitor="val_paid_more_loss", mode='min'),keras.callbacks.EarlyStopping(monitor="val_HOSP_loss", mode='min')
+        callbacks=[
+            keras.callbacks.EarlyStopping(
+                monitor="val_loss", 
+                patience=5,
+                mode='min'
+            )
         ],
-        batch_size = 32
+        batch_size=64,
+        epochs=20  # Set a reasonable number of epochs for each trial
     )
     
     # Retrieve the best model and hyperparameters
@@ -300,7 +325,8 @@ def main():
     for key, value in best_hps.values.items():
         print(f"{key}: {value}")
     
-    best_model.fit(
+    # Train the best model with more epochs
+    history = best_model.fit(
         x=train_inputs,
         y=train_label,
         validation_data=(validation_inputs, validation_label),
@@ -310,37 +336,92 @@ def main():
                 training_data=(train_inputs, train_label),
                 validation_data=(validation_inputs, validation_label),
                 test_data=(test_inputs, test_label)
+            ),
+            keras.callbacks.EarlyStopping(
+                monitor="val_loss", 
+                patience=10,
+                restore_best_weights=True,
+                mode='min'
             )
         ],
-        batch_size=32,
+        batch_size=64,
         shuffle=True
     )
 
-    train_loss = best_model.history.history['loss']
-    val_loss = best_model.history.history['val_loss']
-
-    train_pr_auc_HOSP = best_model.history.history['paid_more_pr_auc']
-    val_pr_auc_HOSP = best_model.history.history['val_paid_more_pr_auc']
-
-    train_roc_auc_HOSP = best_model.history.history['paid_more_roc_auc']
-    val_roc_auc_HOSP = best_model.history.history['val_paid_more_roc_auc']
-
-    train_pr_auc_RDMIT = best_model.history.history['HOSP_pr_auc']
-    val_pr_auc_RDMIT = best_model.history.history['val_HOSP_pr_auc']
-
-    train_roc_auc_RDMIT = best_model.history.history['HOSP_roc_auc']
-    val_roc_auc_RDMIT = best_model.history.history['val_HOSP_roc_auc']
+    # Plot training & validation loss
+    epochs = range(1, len(history.history['loss']) + 1)
     
+    plt.figure(figsize=(12, 10))
+    
+    # Plot overall loss
+    plt.subplot(3, 2, 1)
+    plt.plot(epochs, history.history['loss'], 'bo-', label='Training loss')
+    plt.plot(epochs, history.history['val_loss'], 'ro-', label='Validation loss')
+    plt.title('Training and validation loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    # Plot paid_more metrics
+    plt.subplot(3, 2, 3)
+    plt.plot(epochs, history.history['paid_more_roc_auc'], 'go-', label='Training ROC-AUC')
+    plt.plot(epochs, history.history['val_paid_more_roc_auc'], 'mo-', label='Validation ROC-AUC')
+    plt.title('paid_more ROC-AUC')
+    plt.xlabel('Epochs')
+    plt.ylabel('ROC-AUC')
+    plt.legend()
+    
+    plt.subplot(3, 2, 4)
+    plt.plot(epochs, history.history['paid_more_pr_auc'], 'go-', label='Training PR-AUC')
+    plt.plot(epochs, history.history['val_paid_more_pr_auc'], 'mo-', label='Validation PR-AUC')
+    plt.title('paid_more PR-AUC')
+    plt.xlabel('Epochs')
+    plt.ylabel('PR-AUC')
+    plt.legend()
+    
+    # Plot RDMIT metrics
+    plt.subplot(3, 2, 5)
+    plt.plot(epochs, history.history['RDMIT_roc_auc'], 'co-', label='Training ROC-AUC')
+    plt.plot(epochs, history.history['val_RDMIT_roc_auc'], 'yo-', label='Validation ROC-AUC')
+    plt.title('RDMIT ROC-AUC')
+    plt.xlabel('Epochs')
+    plt.ylabel('ROC-AUC')
+    plt.legend()
+    
+    plt.subplot(3, 2, 6)
+    plt.plot(epochs, history.history['RDMIT_pr_auc'], 'co-', label='Training PR-AUC')
+    plt.plot(epochs, history.history['val_RDMIT_pr_auc'], 'yo-', label='Validation PR-AUC')
+    plt.title('RDMIT PR-AUC')
+    plt.xlabel('Epochs')
+    plt.ylabel('PR-AUC')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig('mmoe_training_metrics.png')
+    plt.show()
+    
+    # Print final evaluation metrics
+    print("Final evaluation metrics:")
+    train_loss = history.history['loss']
+    val_loss = history.history['val_loss']
 
-    print([train_loss, val_loss])
-    print([train_pr_auc_HOSP,
-    val_pr_auc_HOSP,
-    train_roc_auc_HOSP,
-    val_roc_auc_HOSP,
-    train_pr_auc_RDMIT,
-    val_pr_auc_RDMIT,
-    train_roc_auc_RDMIT,
-    val_roc_auc_RDMIT])
+    train_pr_auc_HOSP = history.history['paid_more_pr_auc']
+    val_pr_auc_HOSP = history.history['val_paid_more_pr_auc']
+
+    train_roc_auc_HOSP = history.history['paid_more_roc_auc']
+    val_roc_auc_HOSP = history.history['val_paid_more_roc_auc']
+
+    train_pr_auc_RDMIT = history.history['RDMIT_pr_auc']
+    val_pr_auc_RDMIT = history.history['val_RDMIT_pr_auc']
+
+    train_roc_auc_RDMIT = history.history['RDMIT_roc_auc']
+    val_roc_auc_RDMIT = history.history['val_RDMIT_roc_auc']
+    
+    print(f"Final train loss: {train_loss[-1]:.4f}, val loss: {val_loss[-1]:.4f}")
+    print(f"paid_more - Final train ROC-AUC: {train_roc_auc_HOSP[-1]:.4f}, val ROC-AUC: {val_roc_auc_HOSP[-1]:.4f}")
+    print(f"paid_more - Final train PR-AUC: {train_pr_auc_HOSP[-1]:.4f}, val PR-AUC: {val_pr_auc_HOSP[-1]:.4f}")
+    print(f"RDMIT - Final train ROC-AUC: {train_roc_auc_RDMIT[-1]:.4f}, val ROC-AUC: {val_roc_auc_RDMIT[-1]:.4f}")
+    print(f"RDMIT - Final train PR-AUC: {train_pr_auc_RDMIT[-1]:.4f}, val PR-AUC: {val_pr_auc_RDMIT[-1]:.4f}")
 
 
 if __name__ == '__main__':
