@@ -145,7 +145,7 @@ def data_preparation():
     categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
                         'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
-                        'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
+                        'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_x', 'PRODCAT', 
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
                         'THRGRDS', 'PHYFLAG', 'HOSP']
 
@@ -242,8 +242,8 @@ def main():
         
         # MMoE layer
         mmoe_layers = MMoE(
-            units=hp.Int('mmoe_units', min_value=4, max_value=8, step=2),
-            num_experts=hp.Int('num_experts', min_value=4, max_value=8, step=2),
+            units= 4, #hp.Int('mmoe_units', min_value=4, max_value=8, step=2),
+            num_experts= 4, #$hp.Int('num_experts', min_value=4, max_value=8, step=2),
             num_tasks=2
         )(concat_layer)
         
@@ -253,7 +253,7 @@ def main():
             task_dropout_rate = hp.Float(f'task_{index}_dropout_rate', min_value=0.3, max_value=0.5, step=0.1)
             task_layer = Dropout(task_dropout_rate)(task_layer)
             
-            tower_units = hp.Int(f'tower_units_task_{index}', min_value=2, max_value=8, step=2)
+            tower_units = 6 #hp.Int(f'tower_units_task_{index}', min_value=2, max_value=8, step=2)
             tower_layer = Dense(
                 units=tower_units,
                 activation='relu',
@@ -272,7 +272,7 @@ def main():
                 kernel_regularizer=l2(0.01))(tower_layer)
             output_layers.append(output_layer)
         
-        learning_rate = hp.Choice('learning_rate', values=[0.00001, 0.0001, 0.001])
+        learning_rate = hp.Choice('learning_rate', values=[0.001])
         model = Model(inputs=[inputs], outputs=output_layers)
         model.compile(
             loss={label1: 'binary_crossentropy', label2: 'binary_crossentropy'},
@@ -294,7 +294,7 @@ def main():
         build_model, 
         objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), 
                   keras_tuner.Objective('val_RDMIT_loss', direction='min')], # Minimize loss for both
-        max_trials=2,  # Increased the number of trials for better hyperparameter exploration
+        max_trials=1,  # Increased the number of trials for better hyperparameter exploration
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
         overwrite=True
@@ -314,7 +314,7 @@ def main():
             )
         ],
         batch_size=64,
-        epochs=20  # Set a reasonable number of epochs for each trial
+        epochs=1  # Set a reasonable number of epochs for each trial
     )
     
     # Retrieve the best model and hyperparameters
@@ -345,7 +345,7 @@ def main():
             )
         ],
         batch_size=64,
-        shuffle=True
+      
     )
 
     print("Final evaluation metrics:")

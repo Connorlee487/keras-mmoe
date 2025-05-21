@@ -145,16 +145,16 @@ def data_preparation():
     categorical_columns = ['PROCTYP', 'CAP_SVC', 'FACPROF', 'MHSACOVG', 'NTWKPROV', 
                         'PAIDNTWK', 'ADMTYP', 'MDC', 'DSTATUS', 'PLANTYP', 'MSA', 'AGEGRP', 
                         'EECLASS', 'EESTATU', 'EMPREL', 'SEX', 'HLTHPLAN', 'INDSTRY','OUTPATIENT', 
-                        'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_y', 'PRODCAT', 
+                        'DEACLAS_x', 'GENIND_x', 'THERGRP_x', 'MAINTIN_x', 'PRODCAT', 
                         'SIGLSRC', 'GNINDDS', 'MAINTDS', 'PRDCTDS', 'EXCDGDS', 'MSTFMDS', 'THRCLDS', 
                         'THRGRDS', 'PHYFLAG', 'RDMIT']
-
+    
     # numerical_columns = ['PAY_PER_UNIT']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_hosp_2.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_hosp_2.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_hosp_2.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_hosp_2.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_hosp_3.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_hosp_3.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_hosp_3.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_hosp_3.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
@@ -237,7 +237,7 @@ def main():
         concat_layer = Concatenate()(embeddings)
         
         # Add dropout layer after concatenation (before MMoE)
-        input_dropout_rate = hp.Float('input_dropout_rate', min_value=0.1, max_value=0.5, step=0.1)
+        input_dropout_rate = hp.Float('input_dropout_rate', min_value=0.2, max_value=0.5, step=0.1)
         concat_layer = Dropout(input_dropout_rate)(concat_layer)
         
         # MMoE layer
@@ -294,7 +294,7 @@ def main():
         build_model, 
         objective=[keras_tuner.Objective('val_paid_more_loss', direction='min'), 
                   keras_tuner.Objective('val_RDMIT_loss', direction='min')], # Minimize loss for both
-        max_trials=10,  # Increased the number of trials for better hyperparameter exploration
+        max_trials=5,  # Increased the number of trials for better hyperparameter exploration
         directory='my_dir',
         project_name='mmoe_hyperparameter_tuning', 
         overwrite=True
