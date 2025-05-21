@@ -151,10 +151,10 @@ def data_preparation():
 
     # numerical_columns = ['PAY_PER_UNIT']
     # Following format of original code
-    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_rdmit_3.csv.gz")
-    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_rdmit_3.csv.gz") 
-    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_rdmit_3.csv.gz") 
-    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_rdmit_3.csv.gz") 
+    train_raw_labels = pd.read_csv("/content/keras-mmoe/data/train_raw_labels_pay_rdmit_4.csv.gz")
+    other_raw_labels = pd.read_csv("/content/keras-mmoe/data/other_raw_labels_pay_rdmit_4.csv.gz") 
+    transformed_train_main = pd.read_csv("/content/keras-mmoe/data/transformed_train_pay_rdmit_4.csv.gz") 
+    transformed_other_main = pd.read_csv("/content/keras-mmoe/data/transformed_other_pay_rdmit_4.csv.gz") 
 
     transformed_train = transformed_train_main[categorical_columns]
     transformed_other = transformed_other_main[categorical_columns]
