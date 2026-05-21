@@ -1,0 +1,4 @@
+make sure activate venv in other directory.... 
+
+source ../DeepCTR-Torch/.venv/bin/activate
+deactivate 
