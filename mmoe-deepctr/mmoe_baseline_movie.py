@@ -215,7 +215,7 @@ def main():
     model.compile(
         optimizer="adam",
         loss=["binary_crossentropy", "mse"],
-        metrics=["binary_crossentropy", "mse"]
+        metrics=[]
     )
 
     epochs = int(os.getenv("MOVIELENS_EPOCHS", "20"))
@@ -229,30 +229,29 @@ def main():
         validation_data=(validation_model_input, validation_df[target].values)
     )
 
-    # ------------------------------------------------------------------
-    # Evaluation
-    # ------------------------------------------------------------------
     print("\n--- Evaluation ---")
     for split_name, model_input, df in [
         ("Train",      train_model_input,      train_df),
         ("Validation", validation_model_input, validation_df),
-        ("Test",       test_model_input,        test_df),
+        ("Test",       test_model_input,       test_df),
     ]:
         pred = model.predict(model_input, batch_size=256)
 
-        # Task 1: watch_label — AUC
+        # Task 1: watch_label — AUC (all samples, both pos and neg)
         auc = roc_auc_score(df['watch_label'].values, pred[:, 0])
-        print("ROC-AUC-watch_label-{}: {}".format(split_name, round(auc, 4)))
+        print(f"AUC-watch_label-{split_name}:  {round(auc, 4)}")
 
-        # Task 2: rating_label — RMSE on positive (watched) samples only
+        # Task 2: rating_label — RMSE and MAE on POSITIVE (watched) samples only
+        # (negatives have rating=0 which is not a real rating, exclude them)
         pos_mask = df['watch_label'].values == 1
-        if pos_mask.sum() > 0:
-            rmse = np.sqrt(mean_squared_error(
-                df['rating_label'].values[pos_mask] * 5.0,
-                pred[:, 1][pos_mask] * 5.0
-            ))
-            print("RMSE-rating_label-{}: {}".format(split_name, round(rmse, 4)))
+        true_ratings = df['rating_label'].values[pos_mask] * 5.0   # scale back to 1-5
+        pred_ratings = np.clip(pred[:, 1][pos_mask] * 5.0, 1.0, 5.0)  # clip to valid range
 
+        rmse = np.sqrt(mean_squared_error(true_ratings, pred_ratings))
+        mae  = np.mean(np.abs(true_ratings - pred_ratings))
+        print(f"RMSE-rating_label-{split_name}: {round(rmse, 4)}")
+        print(f"MAE-rating_label-{split_name}:  {round(mae, 4)}")
+        print()
 
 if __name__ == '__main__':
     main()
