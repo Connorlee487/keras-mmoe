@@ -24,7 +24,7 @@ import random
 import os
 import sys
 
-# sys.path.insert(0, '/projects/hps-gcnv-uswest8/xipang/DeepCTR-Torch-master')
+sys.path.insert(0, '/projects/hps-gcnv-uswest8/xipang/DeepCTR-Torch-master')
 
 import pandas as pd
 import numpy as np
@@ -50,17 +50,17 @@ ALL_GENRES = [
 
 def load_raw_data():
     ratings = pd.read_csv(
-        'data/ml-1m/ratings.dat',
+        'data/ml-m1/ratings.dat',
         sep='::', header=None, engine='python',
         names=['user_id', 'movie_id', 'rating', 'timestamp']
     )
     users = pd.read_csv(
-        'data/ml-1m/users.dat',
+        'data/ml-m1/users.dat',
         sep='::', header=None, engine='python',
         names=['user_id', 'gender', 'age', 'occupation', 'zip_code']
     )
     movies = pd.read_csv(
-        'data/ml-1m/movies.dat',
+        'data/ml-m1/movies.dat',
         sep='::', header=None, engine='python',
         names=['movie_id', 'title', 'genres'],
         encoding='latin-1'
@@ -213,7 +213,10 @@ def main():
     model.compile(
         optimizer="adam",
         loss=["binary_crossentropy", "mse"],
-        metrics=["binary_crossentropy", "mse"]
+        metrics=["binary_crossentropy"]  # only monitor Task 1 during training;
+        # DeepCTR applies this metric to all tasks if you pass multiple entries,
+        # which breaks for regression targets — so we monitor only the binary
+        # task here and compute RMSE for Task 2 manually after training.
     )
 
     epochs = int(os.getenv("MOVIELENS_EPOCHS", "20"))
