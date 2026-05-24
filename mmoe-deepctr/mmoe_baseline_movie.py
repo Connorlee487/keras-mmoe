@@ -50,17 +50,17 @@ ALL_GENRES = [
 
 def load_raw_data():
     ratings = pd.read_csv(
-        'data/ml-m1/ratings.dat',
+        'data/ml-1m/ratings.dat',
         sep='::', header=None, engine='python',
         names=['user_id', 'movie_id', 'rating', 'timestamp']
     )
     users = pd.read_csv(
-        'data/ml-m1/users.dat',
+        'data/ml-1m/users.dat',
         sep='::', header=None, engine='python',
         names=['user_id', 'gender', 'age', 'occupation', 'zip_code']
     )
     movies = pd.read_csv(
-        'data/ml-m1/movies.dat',
+        'data/ml-1m/movies.dat',
         sep='::', header=None, engine='python',
         names=['movie_id', 'title', 'genres'],
         encoding='latin-1'
@@ -122,6 +122,8 @@ def data_preparation():
         movies[['movie_id'] + ALL_GENRES],
         on='movie_id', how='left'
     )
+
+    df['rating_label'] = df['rating_label'] / 5.0
 
     target = ['watch_label', 'rating_label']
 
@@ -213,13 +215,11 @@ def main():
     model.compile(
         optimizer="adam",
         loss=["binary_crossentropy", "mse"],
-        metrics=["binary_crossentropy"]  # only monitor Task 1 during training;
-        # DeepCTR applies this metric to all tasks if you pass multiple entries,
-        # which breaks for regression targets — so we monitor only the binary
-        # task here and compute RMSE for Task 2 manually after training.
+        metrics=["binary_crossentropy", "mse"]
     )
 
     epochs = int(os.getenv("MOVIELENS_EPOCHS", "20"))
+
     model.fit(
         train_model_input,
         train_df[target].values,
@@ -248,8 +248,8 @@ def main():
         pos_mask = df['watch_label'].values == 1
         if pos_mask.sum() > 0:
             rmse = np.sqrt(mean_squared_error(
-                df['rating_label'].values[pos_mask],
-                pred[:, 1][pos_mask]
+                df['rating_label'].values[pos_mask] * 5.0,
+                pred[:, 1][pos_mask] * 5.0
             ))
             print("RMSE-rating_label-{}: {}".format(split_name, round(rmse, 4)))
 
