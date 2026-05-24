@@ -33,7 +33,7 @@ class NoisyGate(nn.Module):
     Inference:
         output = softmax(W_gate(x))        [deterministic, zero overhead]
     """
-    def __init__(self, input_dim, num_experts, noise_tau=1.0):
+    def __init__(self, input_dim, num_experts, noise_tau=1):
         super(NoisyGate, self).__init__()
         self.noise_tau = noise_tau
         self.w_gate  = nn.Linear(input_dim, num_experts, bias=False)
@@ -44,7 +44,11 @@ class NoisyGate(nn.Module):
     def forward(self, x):
         logits = self.w_gate(x)                                    # (B, n_experts)
         if self.training:
-            sigma  = self.noise_tau * F.softplus(self.w_noise(x)) # (B, n_experts)
+            # CHANGED TO VV sigma  = self.noise_tau * F.softplus(self.w_noise(x)) # (B, n_experts)
+            sigma = torch.clamp(
+                self.noise_tau * F.softplus(self.w_noise(x)),
+                max=0.5
+            )
             eps    = sigma * torch.randn_like(sigma)
             logits = logits + eps
         return F.softmax(logits, dim=-1)                           # (B, n_experts)
@@ -363,15 +367,31 @@ def main():
 
     # NG-MMoE: drop-in replacement for MMOE
     # only difference from your MMOE call: class=NGMMoE, extra noise_tau param
+
+
+    # CHANGE FOR NMAYBE BETTER PERF
+    # model = NGMMoE(
+    #     dnn_feature_columns,
+    #     task_types=['binary', 'regression'],
+    #     l2_reg_embedding=1e-5,
+    #     task_names=target,
+    #     num_experts=8,
+    #     expert_dnn_hidden_units=(4,),
+    #     tower_dnn_hidden_units=(8,),
+    #     noise_tau=1.0,          # paper default tau=1.0
+    #     device=device
+    # )
+
     model = NGMMoE(
         dnn_feature_columns,
         task_types=['binary', 'regression'],
         l2_reg_embedding=1e-5,
         task_names=target,
-        num_experts=8,
-        expert_dnn_hidden_units=(4,),
+        num_experts=4,
+        expert_dnn_hidden_units=(16, 8),
         tower_dnn_hidden_units=(8,),
-        noise_tau=1.0,          # paper default tau=1.0
+        dnn_dropout=0.1,
+        noise_tau=0.1,
         device=device
     )
 
@@ -382,7 +402,7 @@ def main():
         metrics=[]
     )
 
-    epochs = int(os.getenv("CENSUS_EPOCHS", "20"))
+    epochs = int(os.getenv("CENSUS_EPOCHS", "30"))
     model.fit(
         train_model_input,
         train_df[target].values,
@@ -447,7 +467,7 @@ def main():
         entropies = model.gate_entropy(X_input)
 
     max_entropy = np.log(8)
-    for i, name in enumerate(['income', 'marital']):
+    for i, name in enumerate(['watch', 'rating']):
         utilization = entropies[i] / max_entropy * 100
         print("Gate-Entropy-{}: {:.4f} / {:.4f} max  ({:.1f}% utilization)".format(
             name, entropies[i], max_entropy, utilization
