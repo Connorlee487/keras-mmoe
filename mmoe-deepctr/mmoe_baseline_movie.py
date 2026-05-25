@@ -207,8 +207,8 @@ def main():
         task_types=['binary', 'regression'],
         l2_reg_embedding=1e-5,
         task_names=target,
-        num_experts=8,
-        expert_dnn_hidden_units=(4,),
+        num_experts=4,
+        expert_dnn_hidden_units=(16, 8),
         tower_dnn_hidden_units=(8,),
         device=device
     )
@@ -218,7 +218,7 @@ def main():
         metrics=[]
     )
 
-    epochs = int(os.getenv("MOVIELENS_EPOCHS", "20"))
+    epochs = int(os.getenv("MOVIELENS_EPOCHS", "30"))
 
     model.fit(
         train_model_input,
