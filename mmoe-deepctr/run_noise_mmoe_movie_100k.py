@@ -13,7 +13,7 @@ from deepctr_torch.inputs import SparseFeat, DenseFeat, get_feature_names, combi
 from deepctr_torch.models.basemodel import BaseModel
 from deepctr_torch.layers import DNN, PredictionLayer
 
-SEED = 1
+SEED = 2
 np.random.seed(SEED)
 random.seed(SEED)
 torch.manual_seed(SEED)
@@ -219,7 +219,7 @@ class NGMMoE(BaseModel):
 # -----------------------------------------------------------
 # 3. Data — identical to MMOE script
 # -----------------------------------------------------------
-DATA_DIR = "./ml-100k/ml-100k"
+DATA_DIR = "./data/ml-100k"
 
 ratings_df = pd.read_csv(
     os.path.join(DATA_DIR, "u.data"),

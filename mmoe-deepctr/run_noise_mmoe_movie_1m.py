@@ -204,7 +204,7 @@ class NGMMoE(BaseModel):
 # -----------------------------------------------------------
 # 3. Data — MovieLens 1M
 # -----------------------------------------------------------
-DATA_DIR = "./ml-1m"
+DATA_DIR = "./data/ml-1m"
 
 ratings_df = pd.read_csv(
     os.path.join(DATA_DIR, "ratings.dat"),

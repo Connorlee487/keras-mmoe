@@ -8,7 +8,8 @@ import torch
 from sklearn.metrics import mean_squared_error, roc_auc_score, log_loss
 from sklearn.preprocessing import LabelEncoder
 from deepctr_torch.inputs import SparseFeat, DenseFeat, get_feature_names
-from deepctr_torch.models import MMOE
+from deepctr_torch.models import MMOE  # kept for reference
+from moe import MoE                     # single-gate MoE (this file)
 
 SEED = 1
 np.random.seed(SEED)
@@ -17,38 +18,44 @@ torch.manual_seed(SEED)
 
 REGRESSION_SCALE = 5.0
 
-# -----------------------------------------------------------
-# 1. Data — MovieLens 1M
-# -----------------------------------------------------------
-DATA_DIR = "./data/ml-1m"
 
-# ratings.dat : user_id :: movie_id :: rating :: timestamp
+# -----------------------------------------------------------
+# 1. Data
+# -----------------------------------------------------------
+DATA_DIR = "./data/ml-100k"
+
 ratings_df = pd.read_csv(
-    os.path.join(DATA_DIR, "ratings.dat"),
-    sep="::",
-    engine="python",
+    os.path.join(DATA_DIR, "u.data"),
+    sep="\t",
     names=["user_id", "movie_id", "user_rating", "timestamp"],
 )
 
-# movies.dat : movie_id :: title :: genres (pipe-separated string)
+item_cols = [
+    "movie_id", "movie_title", "release_date", "video_release_date", "imdb_url",
+    "unknown","Action","Adventure","Animation","Childrens","Comedy",
+    "Crime","Documentary","Drama","Fantasy","FilmNoir","Horror",
+    "Musical","Mystery","Romance","SciFi","Thriller","War","Western",
+]
+genre_cols = [
+    "unknown","Action","Adventure","Animation","Childrens","Comedy",
+    "Crime","Documentary","Drama","Fantasy","FilmNoir","Horror",
+    "Musical","Mystery","Romance","SciFi","Thriller","War","Western",
+]
 movies_df = pd.read_csv(
-    os.path.join(DATA_DIR, "movies.dat"),
-    sep="::",
-    engine="python",
-    names=["movie_id", "movie_title", "genres"],
-    encoding="latin-1",
+    os.path.join(DATA_DIR, "u.item"),
+    sep="|", names=item_cols, encoding="latin-1",
 )
-# 1M genres is a string like "Action|Comedy" — take first genre
-movies_df["genre"] = movies_df["genres"].str.split("|").str[0]
-movies_df = movies_df[["movie_id", "movie_title", "genre"]]
+def first_genre(row):
+    for g in genre_cols:
+        if row[g] == 1:
+            return g
+    return "unknown"
+movies_df["genre"] = movies_df.apply(first_genre, axis=1)
 
-# users.dat : user_id :: gender :: age :: occupation :: zip
-# NOTE: 1M column order is different from 100k (gender comes before age)
 users_df = pd.read_csv(
-    os.path.join(DATA_DIR, "users.dat"),
-    sep="::",
-    engine="python",
-    names=["user_id", "gender", "age", "occupation", "zip_code"],
+    os.path.join(DATA_DIR, "u.user"),
+    sep="|",
+    names=["user_id", "age", "gender", "occupation", "zip_code"],
     encoding="latin-1",
 )
 
@@ -90,6 +97,7 @@ data = pd.concat([pos_df, neg_df], ignore_index=True)\
 data = data.merge(users_df[["user_id","age","gender","occupation"]], on="user_id",  how="left")
 data = data.merge(movies_df[["movie_id","movie_title","genre"]],     on="movie_id", how="left")
 
+# User mean rating + movie mean rating (from real ratings only)
 user_mean  = ratings_df.groupby("user_id")["user_rating"].mean().rename("user_mean_rating")
 movie_mean = ratings_df.groupby("movie_id")["user_rating"].mean().rename("movie_mean_rating")
 data = data.merge(user_mean,  on="user_id",  how="left")
@@ -103,6 +111,10 @@ print(f"[INFO] Final dataset : {len(data):,} rows | "
       f"watched rate: {data['watched'].mean():.2%}")
 
 # ── Targets ───────────────────────────────────────────────────────────────────
+# Task 1 – REGRESSION:
+#   watched=1 → real rating / 5.0 * REGRESSION_SCALE
+#   watched=0 → movie_mean / 5.0 * REGRESSION_SCALE (not 0.0)
+# Task 2 – BINARY: watched flag
 data["rating_norm"] = data.apply(
     lambda row: (row["user_rating"]        / 5.0) * REGRESSION_SCALE if row["watched"] == 1
                 else (row["movie_mean_rating"] / 5.0) * REGRESSION_SCALE,
@@ -139,21 +151,22 @@ train_model_input = {name: train[name].values for name in feature_names}
 test_model_input  = {name: test[name].values  for name in feature_names}
 
 # -----------------------------------------------------------
-# 2. Model
+# 2. Model — standard MMOE, same features as NGMMoE
 # -----------------------------------------------------------
 device = "cpu"
 if torch.cuda.is_available():
     print("[INFO] CUDA available – using GPU.")
     device = "cuda:0"
 
-model = MMOE(
+model = MoE(
     dnn_feature_columns,
     task_types=["regression", "binary"],
     l2_reg_embedding=1e-5,
     task_names=["rating_prediction", "watch_prediction"],
     num_experts=8,
-    expert_dnn_hidden_units=(128,),
-    tower_dnn_hidden_units=(128, 64),
+    expert_dnn_hidden_units=(128,),   # same as MMOE
+    gate_dnn_hidden_units=(64,),      # single shared gate
+    tower_dnn_hidden_units=(128, 64), # same as MMOE
     device=device,
 )
 
@@ -167,7 +180,7 @@ model.compile(
 # 3. Train
 # -----------------------------------------------------------
 epochs = int(os.getenv("DEEPCTR_EXAMPLE_EPOCHS", "10"))
-print(f"\n[INFO] Training MMOE for {epochs} epoch(s) ...\n")
+print(f"\n[INFO] Training MoE (single shared gate) for {epochs} epoch(s) ...\n")
 model.fit(
     train_model_input,
     train[target].values,
@@ -182,12 +195,14 @@ model.fit(
 print("\n[INFO] Evaluating on test set ...")
 pred_ans = model.predict(test_model_input, batch_size=256)
 
+# Task 1 – undo REGRESSION_SCALE, evaluate on real watched rows only
 watched_mask = test["watched"].values == 1
 rmse = np.sqrt(mean_squared_error(
     test.loc[watched_mask, "rating_norm"].values / REGRESSION_SCALE,
     pred_ans[watched_mask, 0]                    / REGRESSION_SCALE,
 )) * 5.0
 
+# Task 2 – AUC + LogLoss
 ll  = round(log_loss(test["watched"].values, pred_ans[:, 1]), 4)
 auc = round(roc_auc_score(test["watched"].values, pred_ans[:, 1]), 4)
 
@@ -195,4 +210,3 @@ print("\n── Test Results ─────────────────
 print(f"  rating_prediction     RMSE (1-5 scale) = {rmse:.4f}")
 print(f"  watch_prediction      LogLoss = {ll:.4f}  |  AUC = {auc:.4f}")
 print("─────────────────────────────────────────────────────────────────────")
-
