@@ -22,17 +22,17 @@ REGRESSION_SCALE = 5.0
 
 
 # -----------------------------------------------------------
-# 1. Noisy Gate — mild tau + top-K sparse
+# 1. Noisy Gate
 # -----------------------------------------------------------
 class NoisyGate(nn.Module):
     def __init__(self, input_dim, num_shared, num_task_specific,
                  noise_tau=0.3, top_k=3):
         super(NoisyGate, self).__init__()
-        self.noise_tau      = noise_tau
-        self.top_k          = top_k
-        self.num_experts    = num_shared + num_task_specific
-        self.w_gate         = nn.Linear(input_dim, self.num_experts, bias=False)
-        self.w_noise        = nn.Linear(input_dim, self.num_experts, bias=False)
+        self.noise_tau   = noise_tau
+        self.top_k       = top_k
+        self.num_experts = num_shared + num_task_specific
+        self.w_gate      = nn.Linear(input_dim, self.num_experts, bias=False)
+        self.w_noise     = nn.Linear(input_dim, self.num_experts, bias=False)
         nn.init.xavier_uniform_(self.w_gate.weight)
         nn.init.xavier_uniform_(self.w_noise.weight)
 
@@ -42,7 +42,6 @@ class NoisyGate(nn.Module):
             sigma  = self.noise_tau * F.softplus(self.w_noise(x))
             eps    = sigma * torch.randn_like(sigma)
             logits = logits + eps
-
         topk_vals, _ = torch.topk(logits, self.top_k, dim=-1)
         threshold    = topk_vals[:, -1].unsqueeze(-1)
         mask         = logits < threshold
@@ -51,14 +50,14 @@ class NoisyGate(nn.Module):
 
 
 # -----------------------------------------------------------
-# 2. NG-MMoE with shared + task-specific experts
+# 2. NG-MMoE
 # -----------------------------------------------------------
 class NGMMoE(BaseModel):
     def __init__(
         self,
         dnn_feature_columns,
         num_shared_experts=6,
-        num_task_specific_experts=2,   # dedicated experts per task
+        num_task_specific_experts=2,
         expert_dnn_hidden_units=(128,),
         tower_dnn_hidden_units=(128, 64),
         l2_reg_linear=1e-5,
@@ -95,7 +94,6 @@ class NGMMoE(BaseModel):
         self.input_dim           = self.compute_input_dim(dnn_feature_columns)
         self.load_balance_weight = load_balance_weight
 
-        # Shared experts — used by all tasks
         self.shared_experts = nn.ModuleList([
             DNN(self.input_dim, expert_dnn_hidden_units,
                 activation=dnn_activation, l2_reg=l2_reg_dnn,
@@ -104,8 +102,6 @@ class NGMMoE(BaseModel):
             for _ in range(num_shared_experts)
         ])
 
-        # Task-specific experts — one set per task
-        # regression task gets its own experts, binary task gets its own
         self.task_specific_experts = nn.ModuleList([
             nn.ModuleList([
                 DNN(self.input_dim, expert_dnn_hidden_units,
@@ -117,7 +113,6 @@ class NGMMoE(BaseModel):
             for _ in range(self.num_tasks)
         ])
 
-        # Per-task noisy gates — routes over shared + that task's specific experts
         self.noisy_gates = nn.ModuleList([
             NoisyGate(self.input_dim,
                       num_shared_experts,
@@ -152,35 +147,25 @@ class NGMMoE(BaseModel):
         )
         dnn_input = combined_dnn_input(sparse_embedding_list, dense_value_list)
 
-        # Shared expert outputs — (B, num_shared, hidden)
         shared_outputs = torch.stack(
             [e(dnn_input) for e in self.shared_experts], dim=1
         )
 
-        task_outputs  = []
-        # self.aux_loss = torch.tensor(0.0).to(dnn_input.device)
-        self.balance_loss   = torch.tensor(0.0).to(dnn_input.device) 
+        task_outputs      = []
+        self.balance_loss = torch.tensor(0.0).to(dnn_input.device)
 
         for k in range(self.num_tasks):
-            # Task-specific expert outputs — (B, num_task_specific, hidden)
             specific_outputs = torch.stack(
                 [e(dnn_input) for e in self.task_specific_experts[k]], dim=1
             )
-
-            # Concatenate shared + task-specific for this task
-            # (B, num_shared + num_task_specific, hidden)
-            all_experts_k = torch.cat([shared_outputs, specific_outputs], dim=1)
-
-            # Noisy gate over all experts for task k
-            gate_k        = self.noisy_gates[k](dnn_input)   # (B, num_shared + num_specific)
-            mean_load     = gate_k.mean(dim=0)
-            #self.aux_loss = self.aux_loss + mean_load.var()
-            self.balance_loss = self.balance_loss + mean_load.var()   
-
-            fk        = (gate_k.unsqueeze(-1) * all_experts_k).sum(dim=1)
-            tower_out = self.tower_dnns[k](fk)
-            logit     = self.output_layers[k](tower_out)
-            output    = self.out_layers[k](logit)
+            all_experts_k     = torch.cat([shared_outputs, specific_outputs], dim=1)
+            gate_k            = self.noisy_gates[k](dnn_input)
+            mean_load         = gate_k.mean(dim=0)
+            self.balance_loss = self.balance_loss + mean_load.var()
+            fk                = (gate_k.unsqueeze(-1) * all_experts_k).sum(dim=1)
+            tower_out         = self.tower_dnns[k](fk)
+            logit             = self.output_layers[k](tower_out)
+            output            = self.out_layers[k](logit)
             task_outputs.append(output)
 
         return torch.cat(task_outputs, dim=-1)
@@ -188,7 +173,7 @@ class NGMMoE(BaseModel):
     def get_regularization_loss(self):
         reg_loss = super(NGMMoE, self).get_regularization_loss()
         if hasattr(self, 'balance_loss'):
-            reg_loss = reg_loss + self.load_balance_weight * self.balance_loss 
+            reg_loss = reg_loss + self.load_balance_weight * self.balance_loss
         return reg_loss
 
     def gate_entropy(self, X):
@@ -217,42 +202,32 @@ class NGMMoE(BaseModel):
 
 
 # -----------------------------------------------------------
-# 3. Data — identical to MMOE script
+# 3. Data — MovieLens 1M
 # -----------------------------------------------------------
-DATA_DIR = "./ml-100k/ml-100k"
+DATA_DIR = "./ml-1m"
 
 ratings_df = pd.read_csv(
-    os.path.join(DATA_DIR, "u.data"),
-    sep="\t",
+    os.path.join(DATA_DIR, "ratings.dat"),
+    sep="::",
+    engine="python",
     names=["user_id", "movie_id", "user_rating", "timestamp"],
 )
 
-item_cols = [
-    "movie_id", "movie_title", "release_date", "video_release_date", "imdb_url",
-    "unknown","Action","Adventure","Animation","Childrens","Comedy",
-    "Crime","Documentary","Drama","Fantasy","FilmNoir","Horror",
-    "Musical","Mystery","Romance","SciFi","Thriller","War","Western",
-]
-genre_cols = [
-    "unknown","Action","Adventure","Animation","Childrens","Comedy",
-    "Crime","Documentary","Drama","Fantasy","FilmNoir","Horror",
-    "Musical","Mystery","Romance","SciFi","Thriller","War","Western",
-]
 movies_df = pd.read_csv(
-    os.path.join(DATA_DIR, "u.item"),
-    sep="|", names=item_cols, encoding="latin-1",
+    os.path.join(DATA_DIR, "movies.dat"),
+    sep="::",
+    engine="python",
+    names=["movie_id", "movie_title", "genres"],
+    encoding="latin-1",
 )
-def first_genre(row):
-    for g in genre_cols:
-        if row[g] == 1:
-            return g
-    return "unknown"
-movies_df["genre"] = movies_df.apply(first_genre, axis=1)
+movies_df["genre"] = movies_df["genres"].str.split("|").str[0]
+movies_df = movies_df[["movie_id", "movie_title", "genre"]]
 
 users_df = pd.read_csv(
-    os.path.join(DATA_DIR, "u.user"),
-    sep="|",
-    names=["user_id", "age", "gender", "occupation", "zip_code"],
+    os.path.join(DATA_DIR, "users.dat"),
+    sep="::",
+    engine="python",
+    names=["user_id", "gender", "age", "occupation", "zip_code"],
     encoding="latin-1",
 )
 
@@ -350,8 +325,8 @@ model = NGMMoE(
     task_types=["regression", "binary"],
     l2_reg_embedding=1e-5,
     task_names=["rating_prediction", "watch_prediction"],
-    num_shared_experts=6,          # 6 shared experts
-    num_task_specific_experts=2,   # 2 dedicated per task
+    num_shared_experts=6,
+    num_task_specific_experts=2,
     expert_dnn_hidden_units=(128,),
     tower_dnn_hidden_units=(128, 64),
     noise_tau=0.3,
@@ -423,3 +398,4 @@ for i, task_name in enumerate(["rating_prediction", "watch_prediction"]):
     utilization = entropies[i] / max_entropy * 100
     print(f"Gate-Entropy-{task_name}: {entropies[i]:.4f} / {max_entropy:.4f} max  "
           f"({utilization:.1f}% utilization)")
+
